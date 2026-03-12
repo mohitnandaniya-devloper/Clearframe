@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=75.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clearframe-backend"
+version = "0.1.0"
+description = "Production-grade FastAPI backend for Angel One SmartAPI streaming."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "aioredis>=2.0.1",
+  "asyncpg>=0.30.0",
+  "aiosqlite>=0.21.0",
+  "anyio>=4.4.0",
+  "arq>=0.26.3",
+  "broadcaster>=0.3.1",
+  "email-validator>=2.2.0",
+  "fastapi>=0.115.0",
+  "greenlet>=3.1.1",
+  "gunicorn>=23.0.0",
+  "httptools>=0.6.1",
+  "logzero>=1.7.0",
+  "msgspec>=0.19.0",
+  "orjson>=3.10.0",
+  "passlib[bcrypt]>=1.7.4",
+  "prometheus-client>=0.21.0",
+  "pydantic-settings>=2.6.0",
+  "python-jose[cryptography]>=3.3.0",
+  "redis>=5.2.0",
+  "smartapi-python>=1.5.5",
+  "sqlalchemy>=2.0.36",
+  "structlog>=24.4.0",
+  "tenacity>=9.0.0",
+  "uvicorn[standard]>=0.32.0",
+  "uvloop>=0.21.0",
+  "websocket-client>=1.8.0",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.0",
+  "mypy>=1.13.0",
+  "pre-commit>=4.0.1",
+  "pytest>=8.3.3",
+  "pytest-asyncio>=0.24.0",
+  "ruff>=0.7.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = []
+ignore_missing_imports = true
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["app*"]

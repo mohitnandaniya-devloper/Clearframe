@@ -1,0 +1,30 @@
+[
+  {
+    "id": "angel_one",
+    "name": "Angel One",
+    "tagline": "Fast access to equities, F&O, and mutual funds",
+    "logoSrc": "/angel-one-logo.webp",
+    "enabled": true
+  },
+  {
+    "id": "groww",
+    "name": "Groww",
+    "tagline": "Simple investing workspace for retail portfolios",
+    "logoSrc": "/groww-logo.webp",
+    "enabled": true
+  },
+  {
+    "id": "kite",
+    "name": "Kite by Zerodha",
+    "tagline": "Execution-first trading with clean portfolio views",
+    "logoSrc": "/kite-logo.svg",
+    "enabled": true
+  },
+  {
+    "id": "delta_exchange",
+    "name": "Delta Exchange",
+    "tagline": "Crypto derivatives dashboard with margin visibility",
+    "logoSrc": "/delta-exchange-logo.svg",
+    "enabled": true
+  }
+]

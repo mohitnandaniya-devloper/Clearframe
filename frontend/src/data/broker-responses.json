@@ -1,0 +1,313 @@
+{
+  "angel_one": {
+    "success": true,
+    "provider": "angel_one",
+    "connection_state": "connected",
+    "reason_code": "connected",
+    "message": "Angel One account connected to the local demo workspace.",
+    "reconnect_required": false,
+    "retry_allowed": false,
+    "next_action": "none",
+    "request_id": "demo-angel-one",
+    "data": {
+      "profile_fetch_state": "success",
+      "portfolio_fetch_state": "success",
+      "profile_error": null,
+      "portfolio_error": null,
+      "profile": {
+        "display_name": "Mohit Nandaniya",
+        "client_code": "AG12984",
+        "email": "mohit@clearframe.local",
+        "risk_profile": "Moderate"
+      },
+      "portfolio_summary": {
+        "current_value": 984250.35,
+        "invested_value": 911880.00,
+        "total_pnl": 72370.35,
+        "holdings_count": 5
+      },
+      "holdings": [
+        {
+          "symbol": "RELIANCE",
+          "exchange": "NSE",
+          "symbol_token": "2885",
+          "quantity": 24,
+          "average_price": 2688.45,
+          "last_traded_price": 2962.10,
+          "invested_value": 64522.80,
+          "current_value": 71090.40,
+          "pnl": 6567.60
+        },
+        {
+          "symbol": "TCS",
+          "exchange": "NSE",
+          "symbol_token": "11536",
+          "quantity": 18,
+          "average_price": 3811.30,
+          "last_traded_price": 4018.25,
+          "invested_value": 68603.40,
+          "current_value": 72328.50,
+          "pnl": 3725.10
+        },
+        {
+          "symbol": "HDFCBANK",
+          "exchange": "NSE",
+          "symbol_token": "1333",
+          "quantity": 40,
+          "average_price": 1542.00,
+          "last_traded_price": 1678.80,
+          "invested_value": 61680.00,
+          "current_value": 67152.00,
+          "pnl": 5472.00
+        },
+        {
+          "symbol": "TATAMOTORS",
+          "exchange": "NSE",
+          "symbol_token": "3456",
+          "quantity": 110,
+          "average_price": 892.50,
+          "last_traded_price": 966.20,
+          "invested_value": 98175.00,
+          "current_value": 106282.00,
+          "pnl": 8107.00
+        },
+        {
+          "symbol": "INFY",
+          "exchange": "NSE",
+          "symbol_token": "1594",
+          "quantity": 55,
+          "average_price": 1452.00,
+          "last_traded_price": 1219.20,
+          "invested_value": 79860.00,
+          "current_value": 67056.00,
+          "pnl": -12804.00
+        }
+      ]
+    }
+  },
+  "groww": {
+    "success": true,
+    "provider": "groww",
+    "connection_state": "connected",
+    "reason_code": "connected",
+    "message": "Groww account loaded from local mock data.",
+    "reconnect_required": false,
+    "retry_allowed": false,
+    "next_action": "none",
+    "request_id": "demo-groww",
+    "data": {
+      "profile_fetch_state": "success",
+      "portfolio_fetch_state": "success",
+      "profile_error": null,
+      "portfolio_error": null,
+      "profile": {
+        "display_name": "Aarav Mehta",
+        "client_code": "GR55620",
+        "email": "aarav@clearframe.local",
+        "risk_profile": "Balanced"
+      },
+      "portfolio_summary": {
+        "current_value": 524120.00,
+        "invested_value": 482400.00,
+        "total_pnl": 41720.00,
+        "holdings_count": 4
+      },
+      "holdings": [
+        {
+          "symbol": "ICICIBANK",
+          "exchange": "NSE",
+          "symbol_token": "4963",
+          "quantity": 32,
+          "average_price": 1098.30,
+          "last_traded_price": 1230.00,
+          "invested_value": 35145.60,
+          "current_value": 39360.00,
+          "pnl": 4214.40
+        },
+        {
+          "symbol": "ITC",
+          "exchange": "NSE",
+          "symbol_token": "1660",
+          "quantity": 120,
+          "average_price": 432.80,
+          "last_traded_price": 468.55,
+          "invested_value": 51936.00,
+          "current_value": 56226.00,
+          "pnl": 4290.00
+        },
+        {
+          "symbol": "DMART",
+          "exchange": "NSE",
+          "symbol_token": "19913",
+          "quantity": 14,
+          "average_price": 4022.00,
+          "last_traded_price": 3899.75,
+          "invested_value": 56308.00,
+          "current_value": 54596.50,
+          "pnl": -1711.50
+        },
+        {
+          "symbol": "SBIN",
+          "exchange": "NSE",
+          "symbol_token": "3045",
+          "quantity": 80,
+          "average_price": 744.10,
+          "last_traded_price": 806.60,
+          "invested_value": 59528.00,
+          "current_value": 64528.00,
+          "pnl": 5000.00
+        }
+      ]
+    }
+  },
+  "kite": {
+    "success": true,
+    "provider": "kite",
+    "connection_state": "connected",
+    "reason_code": "connected",
+    "message": "Kite portfolio loaded from seeded frontend JSON.",
+    "reconnect_required": false,
+    "retry_allowed": false,
+    "next_action": "none",
+    "request_id": "demo-kite",
+    "data": {
+      "profile_fetch_state": "success",
+      "portfolio_fetch_state": "success",
+      "profile_error": null,
+      "portfolio_error": null,
+      "profile": {
+        "display_name": "Nisha Rao",
+        "client_code": "ZT90122",
+        "email": "nisha@clearframe.local",
+        "risk_profile": "Growth"
+      },
+      "portfolio_summary": {
+        "current_value": 1248700.00,
+        "invested_value": 1104300.00,
+        "total_pnl": 144400.00,
+        "holdings_count": 5
+      },
+      "holdings": [
+        {
+          "symbol": "LT",
+          "exchange": "NSE",
+          "symbol_token": "11483",
+          "quantity": 20,
+          "average_price": 3428.50,
+          "last_traded_price": 3688.80,
+          "invested_value": 68570.00,
+          "current_value": 73776.00,
+          "pnl": 5206.00
+        },
+        {
+          "symbol": "SUNPHARMA",
+          "exchange": "NSE",
+          "symbol_token": "3351",
+          "quantity": 38,
+          "average_price": 1580.40,
+          "last_traded_price": 1711.90,
+          "invested_value": 60055.20,
+          "current_value": 65052.20,
+          "pnl": 4997.00
+        },
+        {
+          "symbol": "BAJFINANCE",
+          "exchange": "NSE",
+          "symbol_token": "317",
+          "quantity": 16,
+          "average_price": 6942.00,
+          "last_traded_price": 7230.60,
+          "invested_value": 111072.00,
+          "current_value": 115689.60,
+          "pnl": 4617.60
+        },
+        {
+          "symbol": "AXISBANK",
+          "exchange": "NSE",
+          "symbol_token": "5900",
+          "quantity": 64,
+          "average_price": 1090.10,
+          "last_traded_price": 1049.20,
+          "invested_value": 69766.40,
+          "current_value": 67148.80,
+          "pnl": -2617.60
+        },
+        {
+          "symbol": "CDSL",
+          "exchange": "NSE",
+          "symbol_token": "21154",
+          "quantity": 42,
+          "average_price": 1420.55,
+          "last_traded_price": 1589.15,
+          "invested_value": 59663.10,
+          "current_value": 66744.30,
+          "pnl": 7081.20
+        }
+      ]
+    }
+  },
+  "delta_exchange": {
+    "success": true,
+    "provider": "delta_exchange",
+    "connection_state": "connected",
+    "reason_code": "connected",
+    "message": "Delta Exchange demo account is active in offline mode.",
+    "reconnect_required": false,
+    "retry_allowed": false,
+    "next_action": "none",
+    "request_id": "demo-delta",
+    "data": {
+      "profile_fetch_state": "success",
+      "portfolio_fetch_state": "success",
+      "profile_error": null,
+      "portfolio_error": null,
+      "profile": {
+        "display_name": "Ritika Shah",
+        "client_code": "DX77818",
+        "email": "ritika@clearframe.local",
+        "risk_profile": "Aggressive"
+      },
+      "portfolio_summary": {
+        "current_value": 321880.00,
+        "invested_value": 298640.00,
+        "total_pnl": 23240.00,
+        "holdings_count": 3
+      },
+      "holdings": [
+        {
+          "symbol": "BTC-PERP",
+          "exchange": "CRYPTO",
+          "symbol_token": "btc-perp",
+          "quantity": 2,
+          "average_price": 52780.00,
+          "last_traded_price": 58120.00,
+          "invested_value": 105560.00,
+          "current_value": 116240.00,
+          "pnl": 10680.00
+        },
+        {
+          "symbol": "ETH-PERP",
+          "exchange": "CRYPTO",
+          "symbol_token": "eth-perp",
+          "quantity": 18,
+          "average_price": 2860.00,
+          "last_traded_price": 3015.40,
+          "invested_value": 51480.00,
+          "current_value": 54277.20,
+          "pnl": 2797.20
+        },
+        {
+          "symbol": "SOL-PERP",
+          "exchange": "CRYPTO",
+          "symbol_token": "sol-perp",
+          "quantity": 140,
+          "average_price": 118.50,
+          "last_traded_price": 108.95,
+          "invested_value": 16590.00,
+          "current_value": 15253.00,
+          "pnl": -1337.00
+        }
+      ]
+    }
+  }
+}
