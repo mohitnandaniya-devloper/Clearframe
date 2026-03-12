@@ -67,3 +67,31 @@ docker compose up --build
 ```
 
 The compose file is intended for local development. For production, inject environment variables through your platform instead of committing env files.
+
+## Render deployment
+
+Render can build the backend directly from [`backend/Dockerfile`](./Dockerfile).
+
+Recommended service settings:
+
+- Root directory: `backend`
+- Environment: `Docker`
+- Health check path: `/health`
+
+Required Render environment variables:
+
+- `APP_ENV=production`
+- `DEBUG=false`
+- `SECRET_KEY=<strong-random-value>`
+- `DATABASE_URL=<your-supabase-postgres-url>`
+- `REDIS_URL=<your-redis-url>`
+- `ALLOWED_ORIGINS=<comma-separated-frontend-origins>`
+
+Optional useful variables:
+
+- `WEB_CONCURRENCY=1`
+- `SMARTAPI_MOCK_MODE=false`
+
+The container binds to Render's injected `PORT` automatically.
+Until database migrations are moved out of app-worker startup, `WEB_CONCURRENCY=1`
+is the safer default because multiple workers can race on initial table creation.

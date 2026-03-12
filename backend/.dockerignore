@@ -2,6 +2,7 @@
 .env.local
 .env.production
 .venv
+.git
 .pytest_cache
 .mypy_cache
 .ruff_cache
@@ -12,3 +13,6 @@ __pycache__
 *.db
 *.egg-info
 logs
+tests
+docker-compose.yml
+docker/
