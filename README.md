@@ -11,6 +11,7 @@ The product is designed for research and insight generation. Broker connections 
 
 ```text
 .
+├── .agent/                   Internal architecture and contribution standards
 ├── .github/workflows/        CI automation
 ├── backend/                  FastAPI app, tests, Docker assets
 ├── docs/                     Deployment and publishing notes
@@ -47,9 +48,11 @@ Important rules:
 ```bash
 cd backend
 uv sync --group dev
-docker compose up redis -d
 APP_ENV=development uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+Backend development expects real Supabase Postgres and Upstash Redis credentials in
+`backend/.env.local`. Local Docker no longer provisions Redis or Postgres for the app.
 
 ### Frontend
 
@@ -58,6 +61,8 @@ cd frontend
 pnpm install
 pnpm dev --host 127.0.0.1 --port 5173
 ```
+
+If you are working from the repository root, pnpm workspace installs are also supported.
 
 ## Validation
 
@@ -85,6 +90,27 @@ pnpm build
 - Provide backend secrets through your platform or an uncommitted `backend/.env.production`
 - Provide frontend environment values at build/deploy time through an uncommitted `frontend/.env.production`
 - See [docs/deployment.md](docs/deployment.md) for a fuller deployment and pre-publish checklist
+
+## CI/CD
+
+GitHub Actions now provides:
+
+- `CI`: runs frontend lint/typecheck/build, backend lint/tests, and a backend Docker build check
+- `CD`: after successful `CI` on `main`, publishes the backend image to GHCR and optionally triggers deploy hooks
+
+Optional GitHub Actions secrets for deployment:
+
+- `BACKEND_DEPLOY_HOOK_URL`
+- `FRONTEND_DEPLOY_HOOK_URL`
+
+## Internal Standards
+
+Repository structure and future code organization are defined in:
+
+- `.agent/architecture.md`
+- `.agent/naming-conventions.md`
+- `.agent/codebase-rules.md`
+- `.agent/contribution-guide.md`
 
 ## Repository Hygiene
 

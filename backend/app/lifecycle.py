@@ -27,6 +27,15 @@ logger = logging.getLogger(__name__)
 
 async def wait_for_database() -> None:
     attempts = settings.database_connect_max_retries + 1
+    db_target = settings.database_debug_summary
+
+    logger.info(
+        "Connecting to database host=%s port=%s name=%s user=%s",
+        db_target["host"],
+        db_target["port"],
+        db_target["database"],
+        db_target["user"],
+    )
 
     for attempt in range(1, attempts + 1):
         try:
@@ -36,11 +45,23 @@ async def wait_for_database() -> None:
             return
         except (OSError, SQLAlchemyError) as exc:
             if attempt >= attempts:
+                logger.error(
+                    "Database startup failed for host=%s port=%s name=%s user=%s: %s",
+                    db_target["host"],
+                    db_target["port"],
+                    db_target["database"],
+                    db_target["user"],
+                    exc,
+                )
                 raise
             logger.warning(
-                "Database connection attempt %s/%s failed: %s. Retrying in %ss.",
+                "Database connection attempt %s/%s failed for host=%s port=%s name=%s user=%s: %s. Retrying in %ss.",
                 attempt,
                 attempts,
+                db_target["host"],
+                db_target["port"],
+                db_target["database"],
+                db_target["user"],
                 exc,
                 settings.database_connect_retry_delay_seconds,
             )

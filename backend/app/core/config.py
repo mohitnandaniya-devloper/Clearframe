@@ -138,6 +138,16 @@ class Settings(BaseSettings):
     allowed_origins: Annotated[list[str], NoDecode] = ["*"]
     metrics_enabled: bool = True
 
+    @property
+    def database_debug_summary(self) -> dict[str, str | int]:
+        parsed = urlsplit(self.database_url)
+        return {
+            "host": parsed.hostname or "",
+            "port": parsed.port or "",
+            "database": parsed.path.lstrip("/"),
+            "user": parsed.username or "",
+        }
+
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, value: object) -> object:
@@ -197,7 +207,30 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
-        if self.database_host and self.database_password:
+        split_database_values = {
+            "DATABASE_HOST": self.database_host,
+            "DATABASE_PASSWORD": self.database_password,
+        }
+        provided_split_keys = [key for key, value in split_database_values.items() if value]
+
+        if self.database_url:
+            if self.database_host or self.database_password:
+                # An explicit DATABASE_URL should win over split env vars, which may be stale.
+                self.database_url = self.parse_database_url(self.database_url)  # type: ignore[assignment]
+        elif provided_split_keys:
+            required_split_keys = ["DATABASE_HOST", "DATABASE_PASSWORD"]
+            missing_split_keys = [
+                key for key in required_split_keys if not split_database_values.get(key)
+            ]
+            if missing_split_keys:
+                raise ValueError(
+                    "Incomplete database configuration. Missing "
+                    + ", ".join(missing_split_keys)
+                    + ". Configure DATABASE_URL or provide both DATABASE_HOST and "
+                    "DATABASE_PASSWORD. DATABASE_PORT, DATABASE_NAME, and DATABASE_USER "
+                    "may use their defaults."
+                )
+
             encoded_user = quote(self.database_user, safe="")
             encoded_password = quote(self.database_password, safe="")
             encoded_database = quote(self.database_name, safe="")

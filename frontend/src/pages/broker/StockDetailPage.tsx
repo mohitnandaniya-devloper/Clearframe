@@ -102,10 +102,20 @@ export default function StockDetailPage() {
   const fallbackStock = symbol ? getMarketStock(symbol) : undefined;
   const stock = locationState.stock ?? fallbackStock;
   const holding = locationState.holding;
+  const resolvedSymbol = stock?.symbol ?? symbol ?? "";
+  const baseLatestPrice = stock?.price ?? holding?.last_traded_price ?? 0;
+  const baseLiveHistory = stock?.history["1D"] ?? null;
 
   const [timeframe, setTimeframe] = useState<Timeframe>("1D");
-  const [latestPrice, setLatestPrice] = useState<number>(stock?.price ?? holding?.last_traded_price ?? 0);
-  const [liveHistory, setLiveHistory] = useState<number[] | null>(null);
+  const [liveState, setLiveState] = useState<{
+    symbol: string;
+    latestPrice: number;
+    liveHistory: number[] | null;
+  }>(() => ({
+    symbol: resolvedSymbol,
+    latestPrice: baseLatestPrice,
+    liveHistory: baseLiveHistory,
+  }));
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>(() => getStoredWatchlistSymbols());
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -117,9 +127,6 @@ export default function StockDetailPage() {
     }
 
     let closed = false;
-
-    setLatestPrice(stock.price);
-    setLiveHistory(stock.history["1D"]);
 
     const connect = async () => {
       try {
@@ -143,8 +150,11 @@ export default function StockDetailPage() {
               return;
             }
 
-            setLatestPrice(tick.ltp);
-            setLiveHistory((current) => [...(current ?? stock.history["1D"]), tick.ltp].slice(-24));
+            setLiveState((current) => ({
+              symbol: resolvedSymbol,
+              latestPrice: tick.ltp,
+              liveHistory: [...(current.liveHistory ?? stock.history["1D"]), tick.ltp].slice(-24),
+            }));
           } catch {
             // Ignore malformed websocket events for now.
           }
@@ -166,7 +176,7 @@ export default function StockDetailPage() {
       socketRef.current = null;
       void unsubscribeFromMarketSymbols([symbol]);
     };
-  }, [stock, symbol]);
+  }, [resolvedSymbol, stock, symbol]);
 
   if (!symbol || !stock) {
     return (
@@ -188,6 +198,10 @@ export default function StockDetailPage() {
     );
   }
 
+  const latestPrice =
+    liveState.symbol === resolvedSymbol ? liveState.latestPrice : baseLatestPrice;
+  const liveHistory =
+    liveState.symbol === resolvedSymbol ? liveState.liveHistory : baseLiveHistory;
   const activeHistory = timeframe === "1D" ? liveHistory ?? stock.history["1D"] : stock.history[timeframe];
   const chartData = buildChartData(activeHistory, timeframe);
   const referencePrice = activeHistory[0] ?? latestPrice;

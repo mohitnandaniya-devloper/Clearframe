@@ -92,6 +92,7 @@ Required Render environment variables:
 - `APP_ENV=production`
 - `DEBUG=false`
 - `SECRET_KEY=<strong-random-value>`
+- `DATABASE_URL=<render-postgres-url>` or the split `DATABASE_*` values below
 - `DATABASE_HOST=<your-supabase-pooler-host>`
 - `DATABASE_PORT=6543`
 - `DATABASE_NAME=postgres`
@@ -108,3 +109,7 @@ Optional useful variables:
 The container binds to Render's injected `PORT` automatically.
 Until database migrations are moved out of app-worker startup, `WEB_CONCURRENCY=1`
 is the safer default because multiple workers can race on initial table creation.
+
+If Render provides `DATABASE_URL`, prefer that single setting and remove stale
+split `DATABASE_HOST` or `DATABASE_PASSWORD` values from the service env to avoid
+configuration drift.

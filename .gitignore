@@ -3,7 +3,11 @@ Thumbs.db
 .AppleDouble
 .LSOverride
 
-.agent/
+.agent/*
+!.agent/architecture.md
+!.agent/naming-conventions.md
+!.agent/codebase-rules.md
+!.agent/contribution-guide.md
 .pnpm-store/
 .npm/
 .yarn/

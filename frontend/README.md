@@ -35,6 +35,9 @@ pnpm install
 pnpm dev --host 127.0.0.1
 ```
 
+If you prefer working from the repository root, use the root pnpm workspace and run
+frontend commands with `pnpm --dir frontend ...`.
+
 ## Production build
 
 ```bash
@@ -46,3 +49,4 @@ pnpm build
 - Vite automatically loads `.env.local` for development and `.env.production` for production builds.
 - Do not place sensitive server-only credentials in frontend env files, because `VITE_` variables are bundled for the browser.
 - Broker API keys are now expected on the backend only and should never be exposed to the frontend bundle.
+- Route-level screens stay under `src/pages/`; reusable feature widgets belong in `src/components/`.

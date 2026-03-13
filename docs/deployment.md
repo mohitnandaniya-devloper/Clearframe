@@ -10,6 +10,7 @@
 - Prefer Supabase for Postgres and Upstash for Redis.
 - Use `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, and `DATABASE_PASSWORD`, or provide `DATABASE_URL` directly if your platform manages a single URL secret.
 - Set `REDIS_URL` to the Upstash Redis protocol endpoint (`rediss://...`), not the REST API URL.
+- If your platform injects `DATABASE_URL` directly, prefer that as the canonical production setting and remove stale split `DATABASE_*` values from the service environment.
 
 ### Frontend
 
@@ -42,6 +43,18 @@
 - Verify both frontend and backend still pass their local validation commands
 - Choose and add a repository license before making the repository public
 
+## GitHub Actions CD
+
+The repository includes:
+
+- `CI`: validates frontend, backend, and backend Docker image builds
+- `CD`: runs after successful `CI` on `main`, publishes `ghcr.io/<owner>/<repo>/backend`, and can trigger platform deploy hooks
+
+Optional repository secrets:
+
+- `BACKEND_DEPLOY_HOOK_URL`: deploy hook for the backend platform, such as Render
+- `FRONTEND_DEPLOY_HOOK_URL`: deploy hook for the frontend platform
+
 ## Local validation commands
 
 ### Backend
@@ -50,6 +63,13 @@
 cd backend
 uv run ruff check .
 uv run pytest
+```
+
+Optional startup sanity check:
+
+```bash
+cd backend
+APP_ENV=production uv run python -c "from app.core.config import Settings; print(Settings().database_debug_summary)"
 ```
 
 ### Frontend

@@ -45,7 +45,7 @@ export function FloatingDashboardChatbot({
 }: FloatingDashboardChatbotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversation, setConversation] = useState<ChatMessage[]>([]);
   const [isResponding, setIsResponding] = useState(false);
   const replyTimeoutRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -63,19 +63,8 @@ export function FloatingDashboardChatbot({
       }),
     [accountName, connectionLabel, holdings, investedValue, pnlPercentage, totalPnl, totalValue],
   );
+  const messages = useMemo(() => [welcomeMessage, ...conversation], [conversation, welcomeMessage]);
   const topHolding = holdings[0];
-
-  useEffect(() => {
-    setMessages((current) => {
-      if (current.length === 0) {
-        return [welcomeMessage];
-      }
-      if (current.length === 1 && current[0]?.id === "welcome") {
-        return [welcomeMessage];
-      }
-      return current;
-    });
-  }, [welcomeMessage]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -111,7 +100,7 @@ export function FloatingDashboardChatbot({
     };
 
     startTransition(() => {
-      setMessages((current) => [...current, userMessage]);
+      setConversation((current) => [...current, userMessage]);
     });
 
     replyTimeoutRef.current = window.setTimeout(() => {
@@ -125,7 +114,7 @@ export function FloatingDashboardChatbot({
         connectionLabel,
       });
       startTransition(() => {
-        setMessages((current) => [...current, assistantMessage]);
+        setConversation((current) => [...current, assistantMessage]);
       });
       setIsResponding(false);
       replyTimeoutRef.current = null;
@@ -280,7 +269,9 @@ function MascotLauncherCanvas({ isOpen }: { isOpen: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const activeRef = useRef(isOpen);
 
-  activeRef.current = isOpen;
+  useEffect(() => {
+    activeRef.current = isOpen;
+  }, [isOpen]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -472,14 +463,16 @@ function MascotLauncherCanvas({ isOpen }: { isOpen: boolean }) {
 
     return () => {
       window.cancelAnimationFrame(frameId);
+      // The repo ships an untyped local shim for `three`, so narrow runtime checks here.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       scene.traverse((object: any) => {
         if (object instanceof THREE.Mesh) {
           object.geometry.dispose();
-          if (Array.isArray(object.material)) {
-            object.material.forEach((material: any) => material.dispose());
-          } else {
-            object.material.dispose();
-          }
+          const materials = Array.isArray(object.material)
+            ? object.material
+            : [object.material];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          materials.forEach((material: any) => material.dispose());
         }
       });
       renderer.dispose();
