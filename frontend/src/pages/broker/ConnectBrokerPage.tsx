@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { CheckCircle2, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,12 @@ import {
   type BrokerApiResponse,
   type ConnectBrokerCredentials,
 } from "@/lib/api/brokers";
-import { BrokerLoginForm } from "./BrokerLoginForm";
-import { PortfolioDashboard } from "./PortfolioDashboard";
+const BrokerLoginForm = lazy(() =>
+  import("./BrokerLoginForm").then((module) => ({ default: module.BrokerLoginForm })),
+);
+const PortfolioDashboard = lazy(() =>
+  import("./PortfolioDashboard").then((module) => ({ default: module.PortfolioDashboard })),
+);
 
 const CONNECTED_VIEW_RETRY_DELAYS_MS = [0, 800, 1600, 2400];
 
@@ -180,15 +184,17 @@ export default function ConnectBrokerPage() {
 
   if (isConnectedDashboard) {
     return (
-      <PortfolioDashboard
-        brokerName={brokers.find(b => b.id === selectedBroker)?.name || "Broker"}
-        response={connectionResponse!}
-        onDisconnect={handleDisconnect}
-        onRefresh={handleRefreshDashboard}
-        isDisconnecting={isDisconnecting}
-        isRefreshing={isRefreshingDashboard}
-        errorMessage={connectionError}
-      />
+      <Suspense fallback={<DashboardLoadingState />}>
+        <PortfolioDashboard
+          brokerName={brokers.find(b => b.id === selectedBroker)?.name || "Broker"}
+          response={connectionResponse!}
+          onDisconnect={handleDisconnect}
+          onRefresh={handleRefreshDashboard}
+          isDisconnecting={isDisconnecting}
+          isRefreshing={isRefreshingDashboard}
+          errorMessage={connectionError}
+        />
+      </Suspense>
     );
   }
 
@@ -227,12 +233,14 @@ export default function ConnectBrokerPage() {
               transition={{ duration: 0.3 }}
               className="w-full"
             >
+              <Suspense fallback={<LoginLoadingState />}>
                 <BrokerLoginForm
                   brokerName={brokers.find(b => b.id === selectedBroker)?.name || "Broker"}
                   onBack={() => setStep("selection")}
                   onSubmit={handleLoginSubmit}
                   isConnecting={isConnecting}
                 />
+              </Suspense>
               </motion.div>
           ) : step === "response" && selectedBroker ? (
             <motion.div
@@ -390,6 +398,38 @@ export default function ConnectBrokerPage() {
       <footer className="w-full py-6 text-center border-t border-[#2B4E44] mt-auto shrink-0 bg-[#0B201F]">
         <p className="text-[13px] text-[#FFFFFFB3]">© 2026 Clear Frame Inc. All investments carry risk.</p>
       </footer>
+    </div>
+  );
+}
+
+function LoginLoadingState() {
+  return (
+    <div className="mx-auto w-full max-w-[640px] rounded-3xl border border-[#2B4E44] bg-[#102825] p-8">
+      <div className="h-4 w-28 animate-pulse rounded-full bg-[#FFFFFF1A]" />
+      <div className="mt-6 space-y-4">
+        <div className="h-12 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
+        <div className="h-12 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
+        <div className="h-12 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
+      </div>
+    </div>
+  );
+}
+
+function DashboardLoadingState() {
+  return (
+    <div className="flex min-h-screen bg-[#0B201F] text-[#F6F9F2]">
+      <div className="hidden w-72 border-r border-[#2B4E44] bg-[#0B201F] md:block" />
+      <div className="flex-1 p-8">
+        <div className="h-12 w-64 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
+        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-36 animate-pulse rounded-2xl border border-[#2B4E44] bg-[#102825]"
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

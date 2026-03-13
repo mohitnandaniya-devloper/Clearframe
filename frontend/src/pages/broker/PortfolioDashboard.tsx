@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { DashboardTab } from "./DashboardTab";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { motion, type Variants } from "framer-motion";
 import {
   ChartCandlestick,
@@ -13,10 +12,6 @@ import {
   Bell,
   Bookmark,
 } from "lucide-react";
-
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
-import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-
 import {
   getMarketSocketUrl,
   type BrokerApiResponse,
@@ -24,13 +19,8 @@ import {
   subscribeToMarketSymbols,
   unsubscribeFromMarketSymbols,
 } from "@/lib/api/brokers";
-import {
-  FloatingDashboardChatbot,
-  type DashboardChatbotHolding,
-} from "@/components/chatbot/floating-dashboard-chatbot";
+import type { DashboardChatbotHolding } from "@/components/chatbot/floating-dashboard-chatbot";
 import { Routes, Route } from "react-router-dom";
-import StockDetailPage from "./StockDetailPage";
-import { WatchlistTab } from "./WatchlistTab";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +42,19 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { ClearframeBrand } from "@/components/brand/clearframe-brand";
+
+const DashboardTab = lazy(() =>
+  import("./DashboardTab").then((module) => ({ default: module.DashboardTab })),
+);
+const StockDetailPage = lazy(() => import("./StockDetailPage"));
+const WatchlistTab = lazy(() =>
+  import("./WatchlistTab").then((module) => ({ default: module.WatchlistTab })),
+);
+const FloatingDashboardChatbot = lazy(() =>
+  import("@/components/chatbot/floating-dashboard-chatbot").then((module) => ({
+    default: module.FloatingDashboardChatbot,
+  })),
+);
 
 interface PortfolioDashboardProps {
   brokerName: string;
@@ -109,6 +112,7 @@ export function PortfolioDashboard({
   const [trendInterval, setTrendInterval] = useState<TrendInterval>("3M");
   const [activeNavItem, setActiveNavItem] = useState<string>("market");
   const [liveResponse, setLiveResponse] = useState<BrokerApiResponse>(response);
+  const [shouldLoadChatbot, setShouldLoadChatbot] = useState(false);
   const hasTriggeredInitialRefresh = useRef(false);
   const streamSymbols = useMemo(() => {
     const data = asRecord(response.data);
@@ -176,6 +180,26 @@ export function PortfolioDashboard({
       void unsubscribeFromMarketSymbols(streamSymbols);
     };
   }, [liveResponse.connection_state, streamSymbols, streamSymbolsKey]);
+
+  useEffect(() => {
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+
+    if ("requestIdleCallback" in window) {
+      idleId = window.requestIdleCallback(() => setShouldLoadChatbot(true), { timeout: 1200 });
+    } else {
+      timeoutId = globalThis.setTimeout(() => setShouldLoadChatbot(true), 350);
+    }
+
+    return () => {
+      if (idleId !== null) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
 
   const profile = resolveProfile(liveResponse.data);
   const portfolioSummary = asRecord(liveResponse.data?.portfolio_summary);
@@ -640,22 +664,24 @@ export function PortfolioDashboard({
                 </div>
               </div>
             ) : activeNavItem === "market" ? (
-              <Routes>
-                <Route
-                  path="/"
-                  element={
-                    <DashboardTab
-                      holdings={holdings}
-                      totalValue={totalValue}
-                      investedValue={investedValue}
-                      totalPnl={totalPnl}
-                      pnlPercentage={pnlPercentage}
-                      isPnlPositive={isPnlPositive}
-                    />
-                  }
-                />
-                <Route path="/dashboard/stock/:symbol" element={<StockDetailPage />} />
-              </Routes>
+              <Suspense fallback={<ContentLoadingState />}>
+                <Routes>
+                  <Route
+                    path="/"
+                    element={
+                      <DashboardTab
+                        holdings={holdings}
+                        totalValue={totalValue}
+                        investedValue={investedValue}
+                        totalPnl={totalPnl}
+                        pnlPercentage={pnlPercentage}
+                        isPnlPositive={isPnlPositive}
+                      />
+                    }
+                  />
+                  <Route path="/dashboard/stock/:symbol" element={<StockDetailPage />} />
+                </Routes>
+              </Suspense>
             ) : activeNavItem === "assistant" ? (
               <FeaturePlaceholder
                 activeNavLabel={activeNavLabel}
@@ -675,7 +701,9 @@ export function PortfolioDashboard({
                 description="Use this area for guided lessons, market explainers, and bite-sized education tied to current stocks and sectors."
               />
             ) : activeNavItem === "watchlist" ? (
-              <WatchlistTab />
+              <Suspense fallback={<ContentLoadingState />}>
+                <WatchlistTab />
+              </Suspense>
             ) : (
               <FeaturePlaceholder
                 activeNavLabel={activeNavLabel}
@@ -686,26 +714,23 @@ export function PortfolioDashboard({
           </section>
         </main>
 
-        <FloatingDashboardChatbot
-          accountName={accountName}
-          holdings={chatbotHoldings}
-          totalValue={totalValue}
-          investedValue={investedValue}
-          totalPnl={totalPnl}
-          pnlPercentage={pnlPercentage}
-          connectionLabel={connectionStatusLabel}
-        />
+        {shouldLoadChatbot ? (
+          <Suspense fallback={null}>
+            <FloatingDashboardChatbot
+              accountName={accountName}
+              holdings={chatbotHoldings}
+              totalValue={totalValue}
+              investedValue={investedValue}
+              totalPnl={totalPnl}
+              pnlPercentage={pnlPercentage}
+              connectionLabel={connectionStatusLabel}
+            />
+          </Suspense>
+        ) : null}
       </div>
     </SidebarProvider>
   );
 }
-
-const trendChartConfig = {
-  value: {
-    label: "Value",
-    color: "#C4E456",
-  },
-} satisfies ChartConfig;
 
 function HoldingsTrendChart({
   data,
@@ -714,44 +739,70 @@ function HoldingsTrendChart({
   data: PortfolioTrendPoint[];
   interval: TrendInterval;
 }) {
+  const { areaPath, linePath, points, maxValue, minValue } = useMemo(
+    () => buildTrendChartGeometry(data),
+    [data],
+  );
+
+  const lastPoint = points.at(-1);
+
   return (
-    <div className="h-full w-full">
-      <ChartContainer config={trendChartConfig} className="h-full w-full min-h-[150px]">
-        <AreaChart accessibilityLayer data={data} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
+    <div className="h-full w-full rounded-xl border border-[#2B4E44] bg-[#081514]/70 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-xs uppercase tracking-[0.2em] text-[#FFFFFF66]">
+          {interval === "3M" ? "Last 3 Months" : interval === "30D" ? "Last 30 Days" : "Last 7 Days"}
+        </div>
+        <div className="text-right">
+          <div className="text-[11px] text-[#FFFFFF66]">Range</div>
+          <div className="text-sm font-medium text-[#F6F9F2]">
+            {formatCurrency(minValue)} to {formatCurrency(maxValue)}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative h-[160px] w-full">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
           <defs>
-            <linearGradient id="portfolioGlowGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#8CFCBA" stopOpacity={0.4} />
-              <stop offset="95%" stopColor="#8CFCBA" stopOpacity={0} />
+            <linearGradient id="portfolioTrendFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#8CFCBA" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#8CFCBA" stopOpacity="0" />
             </linearGradient>
-            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
           </defs>
-          <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.05)" strokeDasharray="4 6" />
-          <XAxis
-            dataKey="date"
-            tickLine={false}
-            axisLine={false}
-            minTickGap={interval === "7D" ? 24 : 12}
-            tickMargin={10}
-            tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: 500 }}
-          />
-          <ChartTooltip
-            cursor={false}
-            content={<ChartTooltipContent formatter={(value) => formatCurrency(toNumber(value))} />}
-          />
-          <Area
-            type="monotone"
-            dataKey="value"
+
+          <path d="M0 84 H100" stroke="rgba(255,255,255,0.08)" strokeDasharray="3 4" />
+          <path d="M0 56 H100" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 4" />
+          <path d="M0 28 H100" stroke="rgba(255,255,255,0.04)" strokeDasharray="3 4" />
+
+          <path d={areaPath} fill="url(#portfolioTrendFill)" />
+          <path
+            d={linePath}
+            fill="none"
             stroke="#8CFCBA"
-            strokeWidth={3}
-            fillOpacity={1}
-            fill="url(#portfolioGlowGradient)"
-            style={{ filter: "drop-shadow(0px 0px 8px rgba(140, 252, 186, 0.4))" }}
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
-        </AreaChart>
-      </ChartContainer>
+
+          {lastPoint ? (
+            <circle cx={lastPoint.x} cy={lastPoint.y} r="2.6" fill="#8CFCBA" />
+          ) : null}
+        </svg>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between text-[11px] text-[#FFFFFF66]">
+        <span>{data[0]?.date}</span>
+        <span>{data[Math.floor(data.length / 2)]?.date}</span>
+        <span>{data.at(-1)?.date}</span>
+      </div>
+    </div>
+  );
+}
+
+function ContentLoadingState() {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <div className="h-56 animate-pulse rounded-2xl border border-[#2B4E44] bg-[#102825]" />
+      <div className="h-56 animate-pulse rounded-2xl border border-[#2B4E44] bg-[#102825]" />
     </div>
   );
 }
@@ -912,6 +963,35 @@ function applyMarketTick(
       portfolio_summary: portfolioSummary,
     },
   };
+}
+
+function buildTrendChartGeometry(data: PortfolioTrendPoint[]) {
+  if (data.length === 0) {
+    return {
+      areaPath: "M0 100 L100 100 Z",
+      linePath: "M0 100",
+      points: [] as Array<{ x: number; y: number }>,
+      maxValue: 0,
+      minValue: 0,
+    };
+  }
+
+  const values = data.map((point) => point.value);
+  const maxValue = Math.max(...values);
+  const minValue = Math.min(...values);
+  const range = maxValue - minValue || 1;
+  const points = data.map((point, index) => {
+    const x = data.length === 1 ? 50 : (index / (data.length - 1)) * 100;
+    const y = 88 - ((point.value - minValue) / range) * 64;
+    return { x, y };
+  });
+
+  const linePath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`)
+    .join(" ");
+  const areaPath = `${linePath} L100 100 L0 100 Z`;
+
+  return { areaPath, linePath, points, maxValue, minValue };
 }
 
 function buildPortfolioTrendData({
