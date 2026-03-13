@@ -31,17 +31,17 @@ to the browser, so never place provider secrets or server-only credentials here.
 ## Run locally
 
 ```bash
-pnpm install
-pnpm dev --host 127.0.0.1
+pnpm --dir frontend dev --host 127.0.0.1
 ```
 
-If you prefer working from the repository root, use the root pnpm workspace and run
-frontend commands with `pnpm --dir frontend ...`.
+The repository uses a root pnpm workspace and one shared lockfile. Install dependencies
+from the repository root with `pnpm install`, then run frontend commands either with
+`pnpm frontend:...` from the root or `pnpm --dir frontend ...` when working inside this folder.
 
 ## Production build
 
 ```bash
-pnpm build
+pnpm --dir frontend build
 ```
 
 ## Notes

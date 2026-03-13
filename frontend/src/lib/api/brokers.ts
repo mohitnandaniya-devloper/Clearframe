@@ -1,4 +1,9 @@
 import brokersData from "@/data/brokers.json";
+import {
+  buildPortfolioSummary,
+  normalizePortfolioHolding,
+  type PortfolioApiHolding,
+} from "@/lib/portfolio";
 
 export interface Broker {
   id: string;
@@ -33,16 +38,8 @@ interface TokenPair {
   token_type: string;
 }
 
-interface PortfolioPosition {
-  symbol: string;
-  quantity: number;
-  average_price: number;
-  ltp: number;
-  pnl: number;
-}
-
 interface PortfolioResponse {
-  holdings: PortfolioPosition[];
+  holdings: PortfolioApiHolding[];
 }
 
 export interface MarketTickMessage {
@@ -54,6 +51,13 @@ export interface MarketTickMessage {
   bid?: number | null;
   ask?: number | null;
   timestamp: string;
+}
+
+export interface MarketQuoteSnapshot extends MarketTickMessage {
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  close?: number | null;
 }
 
 const brokers = brokersData as Broker[];
@@ -150,19 +154,7 @@ export async function fetchConnectedBrokerView(
     }
   }
 
-  const holdings = (portfolioData?.holdings ?? []).map((holding) => {
-    const investedValue = holding.quantity * holding.average_price;
-    const currentValue = holding.quantity * holding.ltp;
-    return {
-      symbol: holding.symbol,
-      quantity: holding.quantity,
-      average_price: holding.average_price,
-      last_traded_price: holding.ltp,
-      invested_value: investedValue,
-      current_value: currentValue,
-      pnl: holding.pnl,
-    };
-  });
+  const holdings = (portfolioData?.holdings ?? []).map((holding) => normalizePortfolioHolding(holding));
 
   const portfolioSummary = buildPortfolioSummary(holdings);
   const connectedView: BrokerApiResponse = {
@@ -216,6 +208,19 @@ export async function getMarketSocketUrl(): Promise<string> {
   const url = new URL(API_BASE_URL.replace(/\/api\/v1$/, "") + "/ws/market");
   url.searchParams.set("token", accessToken);
   return url.toString();
+}
+
+export async function fetchMarketQuotes(symbols: string[]): Promise<MarketQuoteSnapshot[]> {
+  if (symbols.length === 0) {
+    return [];
+  }
+
+  const url = new URL(`${API_BASE_URL}/market/ltp`);
+  for (const symbol of symbols) {
+    url.searchParams.append("symbols", symbol);
+  }
+
+  return fetchWithAuth<MarketQuoteSnapshot[]>(url.toString());
 }
 
 async function ensureAccessToken(forceRefresh = false): Promise<string> {
@@ -308,25 +313,6 @@ async function buildFetchError(response: Response): Promise<Error> {
   } catch {
     return new Error(`Request failed with status ${response.status}`);
   }
-}
-
-function buildPortfolioSummary(holdings: Array<Record<string, unknown>>): Record<string, unknown> {
-  const investedValue = holdings.reduce(
-    (sum, holding) => sum + Number(holding.invested_value ?? 0),
-    0,
-  );
-  const currentValue = holdings.reduce(
-    (sum, holding) => sum + Number(holding.current_value ?? 0),
-    0,
-  );
-  const totalPnl = holdings.reduce((sum, holding) => sum + Number(holding.pnl ?? 0), 0);
-
-  return {
-    invested_value: investedValue,
-    current_value: currentValue,
-    total_pnl: totalPnl,
-    holdings_count: holdings.length,
-  };
 }
 
 function resolveProfile(

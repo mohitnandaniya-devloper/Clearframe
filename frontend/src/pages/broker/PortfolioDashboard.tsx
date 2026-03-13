@@ -1,6 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { motion, type Variants } from "framer-motion";
 import {
+  DashboardContentSkeleton,
+  StockDetailSkeleton,
+} from "@/components/loading/page-skeletons";
+import {
   ChartCandlestick,
   BriefcaseBusiness,
   Bot,
@@ -8,17 +12,25 @@ import {
   LineChart,
   Settings,
   LogOut,
-  RefreshCw,
   Bell,
   Bookmark,
 } from "lucide-react";
 import {
-  getMarketSocketUrl,
   type BrokerApiResponse,
   type MarketTickMessage,
-  subscribeToMarketSymbols,
-  unsubscribeFromMarketSymbols,
 } from "@/lib/api/brokers";
+import { useMarketStream } from "@/hooks/use-market-stream";
+import {
+  applyMarketTickToHolding,
+  asPortfolioHoldings,
+  buildPortfolioSummary,
+  holdingCurrentValue,
+  holdingHasPosition,
+  holdingInvestedValue,
+  holdingPnlValue,
+  mergePortfolioHoldingsWithLiveState,
+  normalizeSymbolForMatch,
+} from "@/lib/portfolio";
 import type { DashboardChatbotHolding } from "@/components/chatbot/floating-dashboard-chatbot";
 import { Routes, Route } from "react-router-dom";
 import {
@@ -29,6 +41,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -111,20 +131,21 @@ export function PortfolioDashboard({
 }: PortfolioDashboardProps) {
   const [trendInterval, setTrendInterval] = useState<TrendInterval>("3M");
   const [activeNavItem, setActiveNavItem] = useState<string>("market");
-  const [liveResponse, setLiveResponse] = useState<BrokerApiResponse>(response);
+  const [liveResponse, setLiveResponse] = useState<BrokerApiResponse>(() => response);
   const [shouldLoadChatbot, setShouldLoadChatbot] = useState(false);
   const hasTriggeredInitialRefresh = useRef(false);
+  const lastRefreshRequestAtRef = useRef(0);
   const streamSymbols = useMemo(() => {
     const data = asRecord(response.data);
     return asRecords(data?.holdings)
       .map((holding) => stringValue(holding.symbol))
       .filter((symbol) => symbol !== "-");
   }, [response.data]);
-  const streamSymbolsKey = streamSymbols.join(",");
 
-  useEffect(() => {
-    setLiveResponse(response);
-  }, [response]);
+  const mergedResponse = useMemo(
+    () => mergeBrokerSnapshotWithLiveTicks(liveResponse, response),
+    [liveResponse, response],
+  );
 
   useEffect(() => {
     if (hasTriggeredInitialRefresh.current || response.connection_state !== "connected") {
@@ -132,54 +153,56 @@ export function PortfolioDashboard({
     }
 
     hasTriggeredInitialRefresh.current = true;
+    lastRefreshRequestAtRef.current = Date.now();
     void onRefresh();
   }, [onRefresh, response.connection_state]);
 
   useEffect(() => {
-    if (liveResponse.connection_state !== "connected" || streamSymbols.length === 0) {
+    if (response.connection_state !== "connected") {
       return;
     }
 
-    let socket: WebSocket | null = null;
-    let closed = false;
+    const requestRefresh = () => {
+      const now = Date.now();
+      if (isRefreshing || now - lastRefreshRequestAtRef.current < 15000) {
+        return;
+      }
+      lastRefreshRequestAtRef.current = now;
+      void onRefresh();
+    };
 
-    const connect = async () => {
-      try {
-        await subscribeToMarketSymbols(streamSymbols);
-        const socketUrl = await getMarketSocketUrl();
-        if (closed) {
-          return;
-        }
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        requestRefresh();
+      }
+    }, 60000);
 
-        socket = new WebSocket(socketUrl);
-        socket.addEventListener("open", () => {
-          socket?.send(
-            JSON.stringify({ action: "subscribe", symbols: streamSymbols, mode: "LTP" }),
-          );
-        });
-
-        socket.addEventListener("message", (event) => {
-          const tick = JSON.parse(event.data) as MarketTickMessage;
-          setLiveResponse((current) => applyMarketTick(current, tick));
-        });
-      } catch (error) {
-        console.error("Market stream connection failed", error);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestRefresh();
       }
     };
 
-    void connect();
+    window.addEventListener("focus", requestRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      closed = true;
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(
-          JSON.stringify({ action: "unsubscribe", symbols: streamSymbols, mode: "LTP" }),
-        );
-      }
-      socket?.close();
-      void unsubscribeFromMarketSymbols(streamSymbols);
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", requestRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [liveResponse.connection_state, streamSymbols, streamSymbolsKey]);
+  }, [isRefreshing, onRefresh, response.connection_state]);
+
+  useMarketStream({
+    enabled: mergedResponse.connection_state === "connected" && streamSymbols.length > 0,
+    symbols: streamSymbols,
+    onTick: (tick: MarketTickMessage) => {
+      setLiveResponse((current) => applyMarketTick(current, tick));
+    },
+    onError: (error) => {
+      console.error("Market stream connection failed", error);
+    },
+  });
 
   useEffect(() => {
     let idleId: number | null = null;
@@ -201,13 +224,13 @@ export function PortfolioDashboard({
     };
   }, []);
 
-  const profile = resolveProfile(liveResponse.data);
-  const portfolioSummary = asRecord(liveResponse.data?.portfolio_summary);
-  const holdings = asRecords(liveResponse.data?.holdings);
+  const profile = resolveProfile(mergedResponse.data);
+  const portfolioSummary = asRecord(mergedResponse.data?.portfolio_summary);
+  const holdings = asRecords(mergedResponse.data?.holdings);
   const activeHoldings = useMemo(() => holdings.filter(holdingHasPosition), [holdings]);
-  const portfolioFetchState = stringValue(liveResponse.data?.portfolio_fetch_state);
-  const portfolioError = stringOrNull(liveResponse.data?.portfolio_error);
-  const profileError = stringOrNull(liveResponse.data?.profile_error);
+  const portfolioFetchState = stringValue(mergedResponse.data?.portfolio_fetch_state);
+  const portfolioError = stringOrNull(mergedResponse.data?.portfolio_error);
+  const profileError = stringOrNull(mergedResponse.data?.profile_error);
 
   const holdingsCurrentValue = activeHoldings.reduce((sum, holding) => {
     return sum + holdingCurrentValue(holding);
@@ -238,12 +261,13 @@ export function PortfolioDashboard({
 
   const pnlPercentage = investedValue > 0 ? (totalPnl / investedValue) * 100 : 0;
   const isPnlPositive = totalPnl >= 0;
-  const connectionSuccess = liveResponse.connection_state === "connected";
+  const syncStatusLabel = isRefreshing ? "Syncing portfolio..." : "Auto-sync is active.";
+  const connectionSuccess = mergedResponse.connection_state === "connected";
   const isRateLimited = portfolioFetchState === "rate_limited";
   const hasSyncIssue =
     connectionSuccess &&
-    (!liveResponse.success ||
-      liveResponse.reason_code === "connected_partial" ||
+    (!mergedResponse.success ||
+      mergedResponse.reason_code === "connected_partial" ||
       Boolean(errorMessage) ||
       Boolean(profileError) ||
       Boolean(portfolioError) ||
@@ -256,7 +280,7 @@ export function PortfolioDashboard({
         ? "Connected / Rate Limited"
         : "Connected / Sync issue"
       : "Connected"
-    : liveResponse.connection_state;
+    : mergedResponse.connection_state;
   const activeNavLabel =
     NAVIGATION_ITEMS.find((item) => item.id === activeNavItem)?.label ?? "Market";
   const accountName = profile ? stringValue(profile.display_name) : brokerName;
@@ -275,7 +299,7 @@ export function PortfolioDashboard({
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-[#0B201F] text-[#FFFFFFB3] font-sans selection:bg-[#C4E456] selection:text-[#0B201F]">
+      <div className="flex min-h-screen w-full overflow-hidden bg-[#0B201F] font-sans text-[#FFFFFFB3] selection:bg-[#C4E456] selection:text-[#0B201F] md:h-screen">
         <Sidebar
           variant="sidebar"
           collapsible="offcanvas"
@@ -330,21 +354,10 @@ export function PortfolioDashboard({
           </SidebarFooter>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col overflow-hidden bg-[#0B201F]">
-          <header className="h-16 shrink-0 border-b border-[#2B4E44] px-8 flex items-center justify-between bg-[#0B201F]/80 backdrop-blur-md">
+        <main className="flex flex-1 flex-col overflow-hidden bg-[#0B201F]">
+          <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-[#2B4E44] bg-[#0B201F]/80 px-4 backdrop-blur-md sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="text-[#FFFFFFB3] hover:text-[#F6F9F2] -ml-2" />
-              <Routes>
-                <Route path="/dashboard/stock/:symbol" element={
-                  <button 
-                    onClick={() => window.history.back()} 
-                    className="flex items-center gap-1.5 text-[#FFFFFFB3] hover:text-[#C4E456] transition-colors font-semibold uppercase tracking-wider text-sm border-l border-[#2B4E44] pl-4 ml-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15h-6v4l-7-7 7-7v4h6v6z"/></svg>
-                    Back
-                  </button>
-                } />
-              </Routes>
             </div>
             <div className="flex items-center gap-3">
               {/* Notification bell dropdown */}
@@ -401,7 +414,7 @@ export function PortfolioDashboard({
                           <p className="mt-0.5 text-xs text-[#FFFFFFB3]">{errorMessage}</p>
                         </div>
                       )}
-                      {liveResponse.reason_code === "connected_partial" && !portfolioError && !profileError && !errorMessage && !isRateLimited && (
+                      {mergedResponse.reason_code === "connected_partial" && !portfolioError && !profileError && !errorMessage && !isRateLimited && (
                         <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2.5">
                           <p className="text-xs font-semibold text-yellow-400">Partial Connection</p>
                           <p className="mt-0.5 text-xs text-[#FFFFFFB3]">Some data may be unavailable. Try refreshing.</p>
@@ -454,7 +467,7 @@ export function PortfolioDashboard({
             </div>
           </header>
 
-          <section className="flex-1 overflow-y-auto p-8">
+          <section className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             {activeNavItem === "portfolio" ? (
               <div className="space-y-8">
                 {(errorMessage || profileError || portfolioError || portfolioFetchState === "failed") && (
@@ -468,15 +481,12 @@ export function PortfolioDashboard({
 
                 <div>
                   <div className="flex items-center justify-between mb-6">
-                    <h1 className="text-2xl font-bold text-[#F6F9F2]">Your Portfolio</h1>
-                    <button
-                      onClick={() => void onRefresh()}
-                      disabled={isRefreshing}
-                      className="bg-[#C4E456] hover:bg-[#C4E456]/90 text-[#0B201F] px-4 py-2 rounded-lg font-semibold text-sm transition-all transform active:scale-95 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                      {isRefreshing ? "Syncing..." : "Refresh"}
-                    </button>
+                    <div>
+                      <h1 className="text-2xl font-bold text-[#F6F9F2]">Your Portfolio</h1>
+                      <p className="mt-1 text-sm text-[#FFFFFF80]">
+                        Auto-sync is on. {syncStatusLabel}
+                      </p>
+                    </div>
                   </div>
 
                   <motion.div
@@ -541,130 +551,166 @@ export function PortfolioDashboard({
                   </motion.div>
                 </div>
 
-                <div className="bg-[#FFFFFF]/5 border border-[#2B4E44] rounded-xl p-6">
-                  <div className="flex items-center justify-between mb-8">
-                    <div>
-                      <h3 className="text-lg font-semibold text-[#F6F9F2]">Portfolio Performance</h3>
-                      <p className="mt-1 text-xs text-[#FFFFFF80]">Derived from current portfolio value and PnL snapshot</p>
+                <Card className="border-[#2B4E44] bg-[#FFFFFF]/5 text-[#F6F9F2] ring-0">
+                  <CardHeader className="gap-4 md:flex md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg font-semibold text-[#F6F9F2]">
+                        Portfolio Performance
+                      </CardTitle>
+                      <CardDescription className="text-xs text-[#FFFFFF80]">
+                        Derived from current portfolio value and PnL snapshot
+                      </CardDescription>
                     </div>
-                    <div className="flex bg-[#0009] p-1 rounded-lg border border-[#2B4E44]">
+                    <div className="flex flex-wrap gap-2">
                       {(["3M", "30D", "7D"] as TrendInterval[]).map((interval) => (
-                        <button
+                        <Button
                           key={interval}
                           type="button"
+                          variant={trendInterval === interval ? "secondary" : "outline"}
+                          size="sm"
                           onClick={() => setTrendInterval(interval)}
-                          className={`px-4 py-1 text-xs font-medium rounded-md transition-colors ${trendInterval === interval
-                            ? "bg-[#2B4E44] text-[#F6F9F2] shadow-sm"
-                            : "text-[#FFFFFFB3] hover:text-[#F6F9F2]"
-                            }`}
+                          className={
+                            trendInterval === interval
+                              ? "border-[#416133] bg-[#C4E456]/10 text-[#C4E456] hover:bg-[#C4E456]/15 hover:text-[#C4E456]"
+                              : "border-[#2B4E44] bg-[#0009] text-[#FFFFFFB3] hover:bg-[#FFFFFF]/5 hover:text-[#F6F9F2]"
+                          }
                         >
-                          {interval === "3M" ? "Last 3 months" : interval === "30D" ? "Last 30 days" : "Last 7 days"}
-                        </button>
+                          {interval === "3M"
+                            ? "Last 3 months"
+                            : interval === "30D"
+                              ? "Last 30 days"
+                              : "Last 7 days"}
+                        </Button>
                       ))}
                     </div>
-                  </div>
+                  </CardHeader>
 
-                  <div className="w-full h-48 relative">
-                    {!hasActiveHoldings ? (
-                      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-[#2B4E44] bg-[#0009] px-6 text-center">
-                        <div>
-                          <p className="text-sm font-medium text-[#F6F9F2]">No portfolio performance data</p>
-                          <p className="mt-2 text-xs text-[#FFFFFFB3]">
-                            This account has no active holdings yet, so the performance chart is hidden.
-                          </p>
+                  <CardContent>
+                    <div className="relative w-full">
+                      {!hasActiveHoldings ? (
+                        <div className="flex items-center justify-center rounded-xl border border-dashed border-[#2B4E44] bg-[#0009] px-6 py-10 text-center">
+                          <div>
+                            <p className="text-sm font-medium text-[#F6F9F2]">No portfolio performance data</p>
+                            <p className="mt-2 text-xs text-[#FFFFFFB3]">
+                              This account has no active holdings yet, so the performance chart is hidden.
+                            </p>
+                          </div>
                         </div>
+                      ) : (
+                        <HoldingsTrendChart data={trendData} interval={trendInterval} />
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="overflow-hidden border-[#2B4E44] bg-[#102825] shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
+                  <CardHeader className="border-b border-[#2B4E44] px-6 py-5">
+                    <div className="flex items-end justify-between gap-4">
+                      <div>
+                        <CardTitle className="text-xl font-semibold text-[#F6F9F2]">Your Holdings</CardTitle>
+                        <CardDescription className="mt-1 text-sm text-[#FFFFFF80]">
+                          {activeHoldings.length} assets tracked
+                        </CardDescription>
                       </div>
-                    ) : (
-                      <HoldingsTrendChart data={trendData} interval={trendInterval} />
-                    )}
-                  </div>
-                </div>
+                    </div>
+                  </CardHeader>
 
-                <div className="bg-[#FFFFFF]/5 border border-[#2B4E44] rounded-xl overflow-hidden">
-                  <div className="px-6 py-4 border-b border-[#2B4E44] flex items-center justify-between bg-[#FFFFFF]/5">
-                    <h3 className="font-semibold text-[#F6F9F2]">Your Holdings</h3>
-                    <div className="flex items-center gap-2 text-[#FFFFFFB3] text-sm">{activeHoldings.length} assets tracked</div>
-                  </div>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[920px] text-left">
+                        <thead>
+                          <tr className="border-b border-[#2B4E44]/80 text-[11px] uppercase tracking-[0.2em] text-[#FFFFFF73]">
+                            <th className="px-6 py-4 font-medium">Symbol</th>
+                            <th className="px-4 py-4 font-medium">Qty</th>
+                            <th className="px-4 py-4 font-medium">Avg Price</th>
+                            <th className="px-4 py-4 font-medium">LTP</th>
+                            <th className="px-4 py-4 font-medium">Invested</th>
+                            <th className="px-4 py-4 font-medium">Current</th>
+                            <th className="px-6 py-4 text-right font-medium">PnL</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeHoldings.length > 0 ? (
+                            activeHoldings.map((holding, index) => {
+                              const holdingQty = toNumber(holding.quantity);
+                              const avgPrice = toNumber(holding.average_price);
+                              const ltp = toNumber(holding.last_traded_price);
+                              const invVal = holdingInvestedValue(holding) || holdingQty * avgPrice;
+                              const curVal = holdingCurrentValue(holding) || holdingQty * ltp;
+                              const pnl = holdingPnlValue(holding) || curVal - invVal;
+                              const percentChange = invVal > 0 ? (pnl / invVal) * 100 : 0;
+                              const isPos = pnl >= 0;
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse table-fixed">
-                      <colgroup>
-                        <col style={{ width: "18%" }} />
-                        <col style={{ width: "7%" }} />
-                        <col style={{ width: "13%" }} />
-                        <col style={{ width: "13%" }} />
-                        <col style={{ width: "16%" }} />
-                        <col style={{ width: "16%" }} />
-                        <col style={{ width: "17%" }} />
-                      </colgroup>
-                      <thead>
-                        <tr className="text-[11px] uppercase tracking-widest text-[#FFFFFFB3] border-b border-[#2B4E44] bg-[#0009]">
-                          <th className="px-6 py-4 font-bold truncate">Symbol</th>
-                          <th className="px-6 py-4 font-bold">Qty</th>
-                          <th className="px-6 py-4 font-bold">Avg Price</th>
-                          <th className="px-6 py-4 font-bold">LTP</th>
-                          <th className="px-6 py-4 font-bold">Invested</th>
-                          <th className="px-6 py-4 font-bold">Current</th>
-                          <th className="px-6 py-4 font-bold text-right">PnL</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#2B4E44]/50 text-sm">
-                        {activeHoldings.length > 0 ? (
-                          activeHoldings.map((holding, index) => {
-                            const holdingQty = toNumber(holding.quantity);
-                            const avgPrice = toNumber(holding.average_price);
-                            const ltp = toNumber(holding.last_traded_price);
-                            const invVal = holdingInvestedValue(holding) || holdingQty * avgPrice;
-                            const curVal = holdingCurrentValue(holding) || holdingQty * ltp;
-                            const pnl = holdingPnlValue(holding) || curVal - invVal;
-                            const percentChange = invVal > 0 ? (pnl / invVal) * 100 : 0;
-                            const isPos = pnl >= 0;
-
-                            return (
-                              <tr key={`${stringValue(holding.symbol)}-${index}`} className="hover:bg-[#FFFFFF]/5 transition-colors">
-                                <td className="px-6 py-4 font-semibold text-[#F6F9F2] truncate">{stringValue(holding.symbol)}</td>
-                                <td className="px-6 py-4 tabular-nums whitespace-nowrap">{formatNumber(holdingQty)}</td>
-                                <td className="px-6 py-4 font-mono tabular-nums whitespace-nowrap text-[#FFFFFFB3]">{formatCurrency(avgPrice)}</td>
-                                <td className="px-6 py-4 font-mono tabular-nums whitespace-nowrap text-[#F6F9F2]">{formatCurrency(ltp)}</td>
-                                <td className="px-6 py-4 font-mono tabular-nums whitespace-nowrap text-[#FFFFFFB3]">{formatCurrency(invVal)}</td>
-                                <td className="px-6 py-4 font-mono tabular-nums whitespace-nowrap text-[#F6F9F2]">{formatCurrency(curVal)}</td>
-                                <td className="px-6 py-4 text-right align-top">
-                                  <span className={`font-bold font-mono tabular-nums whitespace-nowrap ${isPos ? "text-[#8CFCBA]" : "text-[#EB316F]"}`}>
-                                    {isPos ? "+" : ""}{formatCurrency(pnl)}
-                                  </span>
-                                  <span className="text-[10px] block tabular-nums text-[#FFFFFFB3] mt-0.5">
-                                    {isPos ? "+" : ""}{formatPercent(percentChange)}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan={7} className="px-6 py-12 text-center text-sm text-[#FFFFFFB3]">
-                              No assets found in this account.
+                              return (
+                                <tr
+                                  key={`${stringValue(holding.symbol)}-${index}`}
+                                  className="border-b border-[#2B4E44]/55 transition-colors hover:bg-[#FFFFFF]/[0.03]"
+                                >
+                                  <td className="px-6 py-5">
+                                    <div className="font-semibold text-[#F6F9F2]">{stringValue(holding.symbol)}</div>
+                                  </td>
+                                  <td className="px-4 py-5">
+                                    <div className="tabular-nums text-[#F6F9F2]">{formatNumber(holdingQty)}</div>
+                                  </td>
+                                  <td className="px-4 py-5">
+                                    <div className="font-mono tabular-nums text-[#FFFFFFB3]">{formatCurrency(avgPrice)}</div>
+                                  </td>
+                                  <td className="px-4 py-5">
+                                    <div className="font-mono tabular-nums text-[#F6F9F2]">{formatCurrency(ltp)}</div>
+                                  </td>
+                                  <td className="px-4 py-5">
+                                    <div className="font-mono tabular-nums text-[#FFFFFFB3]">{formatCurrency(invVal)}</div>
+                                  </td>
+                                  <td className="px-4 py-5">
+                                    <div className="font-mono tabular-nums text-[#F6F9F2]">{formatCurrency(curVal)}</div>
+                                  </td>
+                                  <td className="px-6 py-5 text-right">
+                                    <div className={`font-mono text-[15px] font-semibold tabular-nums ${isPos ? "text-[#8CFCBA]" : "text-[#EB316F]"}`}>
+                                      {isPos ? "+" : ""}{formatCurrency(pnl)}
+                                    </div>
+                                    <div className={`mt-1 text-xs tabular-nums ${isPos ? "text-[#C4E456]" : "text-[#EB316F]"}`}>
+                                      {isPos ? "+" : ""}{formatPercent(percentChange)}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={7} className="px-6 py-14 text-center text-sm text-[#FFFFFFB3]">
+                                No assets found in this account.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-[#2B4E44] bg-[#0B201F]/65">
+                            <td colSpan={4} className="px-6 py-5">
+                              <div className="text-sm font-semibold text-[#F6F9F2]">Total Value</div>
+                            </td>
+                            <td className="px-4 py-5">
+                              <div className="font-mono tabular-nums text-[#F6F9F2]">{formatCurrency(investedValue)}</div>
+                            </td>
+                            <td className="px-4 py-5">
+                              <div className="font-mono tabular-nums text-[#F6F9F2]">{formatCurrency(totalValue)}</div>
+                            </td>
+                            <td className="px-6 py-5 text-right">
+                              <div className={`font-mono text-[15px] font-semibold tabular-nums ${isPnlPositive ? "text-[#C4E456]" : "text-[#EB316F]"}`}>
+                                {isPnlPositive ? "+" : ""}{formatCurrency(totalPnl)}
+                              </div>
+                              <div className={`mt-1 text-xs tabular-nums ${isPnlPositive ? "text-[#8CFCBA]" : "text-[#EB316F]"}`}>
+                                {isPnlPositive ? "+" : ""}{formatPercent(pnlPercentage)}
+                              </div>
                             </td>
                           </tr>
-                        )}
-                      </tbody>
-                      <tfoot className="bg-[#0009] text-sm font-bold border-t border-[#2B4E44]">
-                        <tr>
-                          <td colSpan={4} className="px-6 py-4 text-right text-[#FFFFFFB3] uppercase tracking-widest text-xs whitespace-nowrap">
-                            Total Value
-                          </td>
-                          <td className="px-6 py-4 font-mono tabular-nums whitespace-nowrap text-[#F6F9F2]">{formatCurrency(investedValue)}</td>
-                          <td className="px-6 py-4 font-mono tabular-nums whitespace-nowrap text-[#F6F9F2]">{formatCurrency(totalValue)}</td>
-                          <td className={`px-6 py-4 text-right font-bold font-mono tabular-nums whitespace-nowrap ${isPnlPositive ? "text-[#C4E456]" : "text-[#EB316F]"}`}>
-                            {isPnlPositive ? "+" : ""}{formatCurrency(totalPnl)}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             ) : activeNavItem === "market" ? (
-              <Suspense fallback={<ContentLoadingState />}>
+              <Suspense fallback={<DashboardContentSkeleton />}>
                 <Routes>
                   <Route
                     path="/"
@@ -679,7 +725,14 @@ export function PortfolioDashboard({
                       />
                     }
                   />
-                  <Route path="/dashboard/stock/:symbol" element={<StockDetailPage />} />
+                  <Route
+                    path="/dashboard/stock/:symbol"
+                    element={
+                      <Suspense fallback={<StockDetailSkeleton />}>
+                        <StockDetailPage />
+                      </Suspense>
+                    }
+                  />
                 </Routes>
               </Suspense>
             ) : activeNavItem === "assistant" ? (
@@ -701,7 +754,7 @@ export function PortfolioDashboard({
                 description="Use this area for guided lessons, market explainers, and bite-sized education tied to current stocks and sectors."
               />
             ) : activeNavItem === "watchlist" ? (
-              <Suspense fallback={<ContentLoadingState />}>
+              <Suspense fallback={<DashboardContentSkeleton />}>
                 <WatchlistTab />
               </Suspense>
             ) : (
@@ -739,28 +792,29 @@ function HoldingsTrendChart({
   data: PortfolioTrendPoint[];
   interval: TrendInterval;
 }) {
-  const { areaPath, linePath, points, maxValue, minValue } = useMemo(
+  const { areaPath, linePath, maxValue, minValue } = useMemo(
     () => buildTrendChartGeometry(data),
     [data],
   );
 
-  const lastPoint = points.at(-1);
-
   return (
-    <div className="h-full w-full rounded-xl border border-[#2B4E44] bg-[#081514]/70 p-4">
+    <div className="w-full rounded-xl border border-[#2B4E44] bg-[#081514]/70 p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="text-xs uppercase tracking-[0.2em] text-[#FFFFFF66]">
           {interval === "3M" ? "Last 3 Months" : interval === "30D" ? "Last 30 Days" : "Last 7 Days"}
         </div>
-        <div className="text-right">
-          <div className="text-[11px] text-[#FFFFFF66]">Range</div>
-          <div className="text-sm font-medium text-[#F6F9F2]">
-            {formatCurrency(minValue)} to {formatCurrency(maxValue)}
+        <div className="rounded-lg border border-[#2B4E44] bg-[#0B201F]/80 px-3 py-2 text-right">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[#FFFFFF66]">Performance Range</div>
+          <div className="mt-1 text-xs text-[#FFFFFF80]">
+            {formatCurrency(minValue)} - {formatCurrency(maxValue)}
           </div>
+          {/* <div className="mt-1 text-sm font-semibold text-[#F6F9F2]">
+            {formatCurrency(firstValue)} to {formatCurrency(lastValue)}
+          </div> */}
         </div>
       </div>
 
-      <div className="relative h-[160px] w-full">
+      <div className="relative h-40 w-full sm:h-44">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
           <defs>
             <linearGradient id="portfolioTrendFill" x1="0" y1="0" x2="0" y2="1">
@@ -778,14 +832,11 @@ function HoldingsTrendChart({
             d={linePath}
             fill="none"
             stroke="#8CFCBA"
-            strokeWidth="2.4"
+            strokeOpacity="0.95"
+            strokeWidth="1.6"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-
-          {lastPoint ? (
-            <circle cx={lastPoint.x} cy={lastPoint.y} r="2.6" fill="#8CFCBA" />
-          ) : null}
         </svg>
       </div>
 
@@ -794,15 +845,6 @@ function HoldingsTrendChart({
         <span>{data[Math.floor(data.length / 2)]?.date}</span>
         <span>{data.at(-1)?.date}</span>
       </div>
-    </div>
-  );
-}
-
-function ContentLoadingState() {
-  return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <div className="h-56 animate-pulse rounded-2xl border border-[#2B4E44] bg-[#102825]" />
-      <div className="h-56 animate-pulse rounded-2xl border border-[#2B4E44] bg-[#102825]" />
     </div>
   );
 }
@@ -876,32 +918,6 @@ function numericOrFallback(value: unknown, fallback: number): number {
   return Number.isNaN(numeric) ? fallback : numeric;
 }
 
-function holdingInvestedValue(holding: Record<string, unknown>): number {
-  const quantity = toNumber(holding.quantity);
-  const averagePrice = toNumber(holding.average_price);
-  return numericOrFallback(holding.invested_value, quantity * averagePrice);
-}
-
-function holdingCurrentValue(holding: Record<string, unknown>): number {
-  const quantity = toNumber(holding.quantity);
-  const lastTradedPrice = toNumber(holding.last_traded_price);
-  return numericOrFallback(holding.current_value, quantity * lastTradedPrice);
-}
-
-function holdingPnlValue(holding: Record<string, unknown>): number {
-  const investedValue = holdingInvestedValue(holding);
-  const currentValue = holdingCurrentValue(holding);
-  return numericOrFallback(holding.pnl, currentValue - investedValue);
-}
-
-function holdingHasPosition(holding: Record<string, unknown>): boolean {
-  return (
-    toNumber(holding.quantity) > 0 ||
-    holdingInvestedValue(holding) > 0 ||
-    holdingCurrentValue(holding) > 0
-  );
-}
-
 function applyMarketTick(
   response: BrokerApiResponse,
   tick: MarketTickMessage,
@@ -911,55 +927,47 @@ function applyMarketTick(
     return response;
   }
 
-  const holdings = asRecords(data.holdings).map((holding) => {
-    if (stringValue(holding.symbol).toUpperCase() !== tick.symbol.toUpperCase()) {
+  const holdings = asPortfolioHoldings(data.holdings).map((holding) => {
+    if (normalizeSymbolForMatch(holding.symbol) !== normalizeSymbolForMatch(tick.symbol)) {
       return holding;
     }
 
-    const quantity = toNumber(holding.quantity);
-    const averagePrice = toNumber(holding.average_price);
-    const currentValue = quantity * tick.ltp;
-    const investedValue = quantity * averagePrice;
-
-    // Append LTP to history for sparklines (cap at 60 points)
-    const prevHistory = Array.isArray(holding._ltpHistory) ? (holding._ltpHistory as number[]) : [];
-    const _ltpHistory = [...prevHistory, tick.ltp].slice(-60);
-
-    return {
-      ...holding,
-      last_traded_price: tick.ltp,
-      current_value: currentValue,
-      invested_value: investedValue,
-      pnl: currentValue - investedValue,
-      _ltpHistory,
-    };
+    return applyMarketTickToHolding(holding, tick.ltp);
   });
-
-  const portfolioSummary = holdings.reduce<{
-    current_value: number;
-    invested_value: number;
-    total_pnl: number;
-    holdings_count: number;
-  }>(
-    (summary, holding) => {
-      summary.current_value += holdingCurrentValue(holding);
-      summary.invested_value += holdingInvestedValue(holding);
-      summary.total_pnl += holdingPnlValue(holding);
-      return summary;
-    },
-    {
-      current_value: 0,
-      invested_value: 0,
-      total_pnl: 0,
-      holdings_count: holdings.length,
-    },
-  );
+  const portfolioSummary = buildPortfolioSummary(holdings);
 
   return {
     ...response,
     data: {
       ...data,
       holdings,
+      portfolio_summary: portfolioSummary,
+    },
+  };
+}
+
+function mergeBrokerSnapshotWithLiveTicks(
+  current: BrokerApiResponse,
+  incoming: BrokerApiResponse,
+): BrokerApiResponse {
+  const incomingData = asRecord(incoming.data);
+  const currentData = asRecord(current.data);
+
+  if (!incomingData) {
+    return incoming;
+  }
+
+  const mergedHoldings = mergePortfolioHoldingsWithLiveState(
+    asPortfolioHoldings(incomingData.holdings),
+    asPortfolioHoldings(currentData?.holdings),
+  );
+  const portfolioSummary = buildPortfolioSummary(mergedHoldings);
+
+  return {
+    ...incoming,
+    data: {
+      ...incomingData,
+      holdings: mergedHoldings,
       portfolio_summary: portfolioSummary,
     },
   };

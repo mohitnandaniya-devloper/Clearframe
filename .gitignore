@@ -4,13 +4,10 @@ Thumbs.db
 .LSOverride
 
 .agent/*
-!.agent/architecture.md
-!.agent/naming-conventions.md
-!.agent/codebase-rules.md
-!.agent/contribution-guide.md
 .pnpm-store/
 .npm/
 .yarn/
+node_modules/
 tmp/
 *.tmp
 *.pid

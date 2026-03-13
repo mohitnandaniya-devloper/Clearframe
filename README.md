@@ -11,10 +11,9 @@ The product is designed for research and insight generation. Broker connections 
 
 ```text
 .
-├── .agent/                   Internal architecture and contribution standards
 ├── .github/workflows/        CI automation
 ├── backend/                  FastAPI app, tests, Docker assets
-├── docs/                     Deployment and publishing notes
+├── docs/                     Deployment, architecture, and contribution notes
 ├── frontend/                 React app, static assets, build config
 ├── CONTRIBUTING.md           Developer contribution guidance
 └── README.md                 Repository overview and setup
@@ -57,12 +56,12 @@ Backend development expects real Supabase Postgres and Upstash Redis credentials
 ### Frontend
 
 ```bash
-cd frontend
 pnpm install
-pnpm dev --host 127.0.0.1 --port 5173
+pnpm frontend:dev -- --host 127.0.0.1 --port 5173
 ```
 
-If you are working from the repository root, pnpm workspace installs are also supported.
+The repository uses one root pnpm workspace. Install from the repository root and
+use the root frontend scripts so there is a single lockfile and one package-management flow.
 
 ## Validation
 
@@ -76,9 +75,8 @@ uv run pytest
 Frontend:
 
 ```bash
-cd frontend
-pnpm typecheck
-pnpm build
+pnpm frontend:typecheck
+pnpm frontend:build
 ```
 
 ## Deployment Notes
@@ -107,10 +105,10 @@ Optional GitHub Actions secrets for deployment:
 
 Repository structure and future code organization are defined in:
 
-- `.agent/architecture.md`
-- `.agent/naming-conventions.md`
-- `.agent/codebase-rules.md`
-- `.agent/contribution-guide.md`
+- `docs/architecture.md`
+- `docs/naming-conventions.md`
+- `docs/codebase-rules.md`
+- `docs/contribution-guide.md`
 
 ## Repository Hygiene
 

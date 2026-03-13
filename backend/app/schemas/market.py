@@ -15,6 +15,10 @@ class MarketDataResponse(BaseModel):
     token: str
     exchange: str
     ltp: float
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    close: float | None = None
     volume: int | None = None
     bid: float | None = None
     ask: float | None = None

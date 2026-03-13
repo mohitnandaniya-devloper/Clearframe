@@ -1,5 +1,10 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { CheckCircle2, ArrowRight } from "lucide-react";
+import {
+  BrokerSelectionSkeleton,
+  DashboardShellSkeleton,
+  LoginFormSkeleton,
+} from "@/components/loading/page-skeletons";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
@@ -22,6 +27,25 @@ const PortfolioDashboard = lazy(() =>
 
 const CONNECTED_VIEW_RETRY_DELAYS_MS = [0, 800, 1600, 2400];
 
+function BrokerLogo({ name, logoSrc }: { name: string; logoSrc: string }) {
+  const [hasImageError, setHasImageError] = useState(false);
+
+  return (
+    <div className="mb-4 flex size-12 items-center justify-center rounded-full border border-[#E6ECD6] bg-[#F6F9F2] md:size-14">
+      {hasImageError ? (
+        <span className="text-xl font-bold text-[#0B201F]">{name.charAt(0)}</span>
+      ) : (
+        <img
+          alt={`${name} Logo`}
+          className="h-7 w-7 rounded-full object-contain md:h-9 md:w-9"
+          src={logoSrc}
+          onError={() => setHasImageError(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function ConnectBrokerPage() {
   const [selectedBroker, setSelectedBroker] = useState<string | null>("angel_one");
   const [step, setStep] = useState<"selection" | "login" | "response">("selection");
@@ -33,6 +57,7 @@ export default function ConnectBrokerPage() {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [connectionResponse, setConnectionResponse] = useState<BrokerApiResponse | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const selectedBrokerRecord = brokers.find((item) => item.id === selectedBroker) ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +94,7 @@ export default function ConnectBrokerPage() {
       return;
     }
 
-    const broker = brokers.find((item) => item.id === selectedBroker);
+    const broker = selectedBrokerRecord;
     if (!broker?.enabled) {
       return;
     }
@@ -102,11 +127,11 @@ export default function ConnectBrokerPage() {
     return () => {
       cancelled = true;
     };
-  }, [brokers, selectedBroker, step]);
+  }, [selectedBrokerRecord, selectedBroker, step]);
 
   const handleConnect = () => {
     if (!selectedBroker) return;
-    const broker = brokers.find((item) => item.id === selectedBroker);
+    const broker = selectedBrokerRecord;
     if (!broker?.enabled) return;
     setConnectionError(null);
     setStep("login");
@@ -184,9 +209,9 @@ export default function ConnectBrokerPage() {
 
   if (isConnectedDashboard) {
     return (
-      <Suspense fallback={<DashboardLoadingState />}>
+      <Suspense fallback={<DashboardShellSkeleton />}>
         <PortfolioDashboard
-          brokerName={brokers.find(b => b.id === selectedBroker)?.name || "Broker"}
+          brokerName={selectedBrokerRecord?.name || "Broker"}
           response={connectionResponse!}
           onDisconnect={handleDisconnect}
           onRefresh={handleRefreshDashboard}
@@ -215,13 +240,12 @@ export default function ConnectBrokerPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#0B201F] text-[#F6F9F2] font-sans m-0 p-0 overflow-x-hidden">
-      <header className="w-full flex items-center justify-between px-6 py-4 lg:px-12 shrink-0 border-b border-[#2B4E44]">
+    <div className="m-0 flex min-h-screen w-full flex-col overflow-x-hidden bg-[#0B201F] p-0 font-sans text-[#F6F9F2]">
+      <header className="w-full shrink-0 border-b border-[#2B4E44] bg-[#0B201F]/90 px-4 py-4 sm:px-6 lg:px-12">
         <ClearframeBrand titleClassName="text-xl font-bold tracking-tight text-[#F6F9F2]" />
       </header>
 
-      {/* Main Content - Force it to take up the remaining viewport height strictly centering content */}
-      <main className="flex-1 w-full flex flex-col items-center justify-center px-4 md:px-6 py-8 max-w-5xl mx-auto">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-start px-4 py-8 sm:px-6 lg:justify-center">
         <AnimatePresence mode="wait">
 
           {step === "login" && selectedBroker ? (
@@ -233,7 +257,7 @@ export default function ConnectBrokerPage() {
               transition={{ duration: 0.3 }}
               className="w-full"
             >
-              <Suspense fallback={<LoginLoadingState />}>
+              <Suspense fallback={<LoginFormSkeleton />}>
                 <BrokerLoginForm
                   brokerName={brokers.find(b => b.id === selectedBroker)?.name || "Broker"}
                   onBack={() => setStep("selection")}
@@ -252,10 +276,10 @@ export default function ConnectBrokerPage() {
               className="w-full flex justify-center"
             >
               {connectionResponse ? (
-                <div className="w-full max-w-[640px] rounded-2xl border border-[#EB316F]/40 bg-[#EB316F]/10 p-6 text-[#F6F9F2]">
+                <div className="w-full max-w-[640px] rounded-2xl border border-[#EB316F]/30 bg-[#102825] p-6 text-[#F6F9F2] shadow-[0_24px_60px_rgba(0,0,0,0.22)]">
                   <h3 className="text-[24px] font-medium mb-2 text-[#EB316F]">Connection Failed</h3>
                   <p className="text-base text-[#FFFFFFB3]">{connectionResponse.message || "We couldn't connect to your broker. Please check your details and try again."}</p>
-                  <div className="mt-6 flex gap-4">
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                     <Button
                       onClick={() => setStep("login")}
                       className="bg-[#C4E456] hover:bg-[#C4E456]/90 text-[#0B201F] font-medium"
@@ -276,7 +300,7 @@ export default function ConnectBrokerPage() {
                   </div>
                 </div>
               ) : (
-                <div className="w-full max-w-[640px] rounded-2xl border border-[#EB316F]/40 bg-[#EB316F]/10 p-6 text-[#F6F9F2]">
+                <div className="w-full max-w-[640px] rounded-2xl border border-[#EB316F]/30 bg-[#102825] p-6 text-[#F6F9F2] shadow-[0_24px_60px_rgba(0,0,0,0.22)]">
                   <h3 className="text-[24px] font-medium mb-2 text-[#EB316F]">Connection Failed</h3>
                   <p className="text-base text-[#FFFFFFB3]">{connectionError ?? "We didn't receive a valid response from the broker."}</p>
                   <div className="mt-6">
@@ -300,11 +324,11 @@ export default function ConnectBrokerPage() {
               className="w-full flex flex-col items-center"
             >
               {/* Typography Section */}
-              <motion.div variants={itemVariants} className="text-center mb-10 w-full">
-                <h2 className="text-[40px] lg:text-[56px] font-semibold mb-4 text-[#F6F9F2] tracking-tight leading-tight">
+              <motion.div variants={itemVariants} className="mb-10 w-full text-center">
+                <h2 className="mb-4 text-[34px] font-semibold leading-tight tracking-tight text-[#F6F9F2] sm:text-[40px] lg:text-[56px]">
                   Connect Your Broker
                 </h2>
-                <p className="text-[#FFFFFFB3] text-[16px] lg:text-[18px] max-w-md mx-auto px-4 font-normal leading-relaxed">
+                <p className="mx-auto max-w-md px-4 text-[15px] font-normal leading-relaxed text-[#FFFFFFB3] sm:text-[16px] lg:text-[18px]">
                   Choose your broker to securely link your account and sync your portfolio.
                 </p>
               </motion.div>
@@ -312,10 +336,8 @@ export default function ConnectBrokerPage() {
               {/* Broker Grid */}
               <div className="w-full max-w-3xl">
                 {isLoading ? (
-                  <motion.div variants={itemVariants} className="flex justify-center items-center py-12">
-                    <p className="text-muted-foreground animate-pulse text-[#FFFFFFB3]">
-                      Loading available brokers...
-                    </p>
+                  <motion.div variants={itemVariants}>
+                    <BrokerSelectionSkeleton />
                   </motion.div>
                 ) : (
                   <motion.div variants={containerVariants} className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 w-full">
@@ -325,10 +347,10 @@ export default function ConnectBrokerPage() {
                         <motion.div key={broker.id} variants={itemVariants}>
                           <Card
                             onClick={() => broker.enabled && setSelectedBroker(broker.id)}
-                            className={`group relative border transition-all duration-300 cursor-pointer overflow-hidden ${isSelected
-                                ? "border-[#C4E456] shadow-[0_8px_30px_rgb(196,228,86,0.15)] bg-[#2B4E44] scale-[1.02] z-10"
+                            className={`group relative overflow-hidden border transition-all duration-300 cursor-pointer ${isSelected
+                                ? "border-[#C4E456] shadow-[0_18px_40px_rgba(0,0,0,0.22)] bg-[#102825] scale-[1.02] z-10"
                                 : broker.enabled
-                                  ? "border-[#2B4E44] shadow-sm hover:border-[#416133] hover:shadow-md hover:bg-[#2B4E44]/50 bg-[#0B201F]"
+                                  ? "border-[#2B4E44] bg-[#102825] hover:border-[#416133] hover:bg-[#14302c]"
                                   : "border-[#2B4E44] bg-[#0B201F]/70 opacity-60 cursor-not-allowed"
                               }`}
                             style={{ borderRadius: "16px" }}
@@ -343,17 +365,7 @@ export default function ConnectBrokerPage() {
                                   <CheckCircle2 className="w-5 h-5 fill-[#C4E456] text-[#0B201F]" />
                                 </motion.div>
                               )}
-                              <div className="size-12 md:size-14 mb-4 rounded-full bg-[#F6F9F2] flex items-center justify-center shadow-inner border border-[#E6ECD6]">
-                                <img
-                                  alt={`${broker.name} Logo`}
-                                  className="w-7 h-7 md:w-9 md:h-9 object-contain rounded-full"
-                                  src={broker.logoSrc}
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    e.currentTarget.parentElement!.innerHTML = `<span class="font-bold text-xl text-[#0B201F]">${broker.name.charAt(0)}</span>`;
-                                  }}
-                                />
-                              </div>
+                              <BrokerLogo name={broker.name} logoSrc={broker.logoSrc} />
                               <h3 className="text-base md:text-lg font-medium mb-1 text-[#F6F9F2] leading-tight">{broker.name}</h3>
                               <p className="text-xs text-[#FFFFFFB3]">{broker.tagline}</p>
                               {!broker.enabled && <p className="mt-2 text-[11px] text-[#FFFFFFB3]">Coming Soon</p>}
@@ -375,12 +387,12 @@ export default function ConnectBrokerPage() {
                   <Button
                     size="lg"
                     onClick={handleConnect}
-                    disabled={isCheckingExistingConnection || !brokers.find((item) => item.id === selectedBroker)?.enabled}
+                    disabled={isCheckingExistingConnection || !selectedBrokerRecord?.enabled}
                     className="w-full h-14 md:h-16 text-[16px] font-medium shadow-[0_8px_30px_rgb(196,228,86,0.2)] flex items-center justify-center gap-2 group rounded-xl bg-[#C4E456] hover:bg-[#C4E456]/90 text-[#0B201F]"
                     style={{ borderRadius: "16px" }}
                   >
                     <span>
-                      {isCheckingExistingConnection ? "Connecting securely..." : `Connect ${brokers.find((b) => b.id === selectedBroker)?.name}`}
+                      {isCheckingExistingConnection ? "Connecting securely..." : `Connect ${selectedBrokerRecord?.name ?? "Broker"}`}
                     </span>
                     {!isCheckingExistingConnection && <ArrowRight className="w-5 h-5 group-hover:translate-x-1.5 transition-transform" />}
                   </Button>
@@ -395,41 +407,9 @@ export default function ConnectBrokerPage() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full py-6 text-center border-t border-[#2B4E44] mt-auto shrink-0 bg-[#0B201F]">
+      <footer className="mt-auto w-full shrink-0 border-t border-[#2B4E44] bg-[#0B201F] py-6 text-center">
         <p className="text-[13px] text-[#FFFFFFB3]">© 2026 Clear Frame Inc. All investments carry risk.</p>
       </footer>
-    </div>
-  );
-}
-
-function LoginLoadingState() {
-  return (
-    <div className="mx-auto w-full max-w-[640px] rounded-3xl border border-[#2B4E44] bg-[#102825] p-8">
-      <div className="h-4 w-28 animate-pulse rounded-full bg-[#FFFFFF1A]" />
-      <div className="mt-6 space-y-4">
-        <div className="h-12 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
-        <div className="h-12 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
-        <div className="h-12 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
-      </div>
-    </div>
-  );
-}
-
-function DashboardLoadingState() {
-  return (
-    <div className="flex min-h-screen bg-[#0B201F] text-[#F6F9F2]">
-      <div className="hidden w-72 border-r border-[#2B4E44] bg-[#0B201F] md:block" />
-      <div className="flex-1 p-8">
-        <div className="h-12 w-64 animate-pulse rounded-2xl bg-[#FFFFFF12]" />
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-36 animate-pulse rounded-2xl border border-[#2B4E44] bg-[#102825]"
-            />
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

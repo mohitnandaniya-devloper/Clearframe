@@ -8,6 +8,10 @@ on:
       - completed
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 concurrency:
   group: cd-${{ github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: false
@@ -19,6 +23,7 @@ env:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       should_deploy: ${{ steps.gate.outputs.should_deploy }}
       git_sha: ${{ steps.gate.outputs.git_sha }}
@@ -50,11 +55,9 @@ jobs:
 
   publish-backend-image:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: prepare
     if: needs.prepare.outputs.should_deploy == 'true'
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,10 +87,12 @@ jobs:
 
   deploy-backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs:
       - prepare
       - publish-backend-image
     if: needs.prepare.outputs.should_deploy == 'true'
+    environment: production
     steps:
       - name: Trigger backend deployment
         env:
@@ -99,14 +104,16 @@ jobs:
             exit 0
           fi
 
-          curl --fail --silent --show-error --request POST "$BACKEND_DEPLOY_HOOK_URL"
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --max-time 30 --request POST "$BACKEND_DEPLOY_HOOK_URL"
 
   deploy-frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs:
       - prepare
       - publish-backend-image
     if: needs.prepare.outputs.should_deploy == 'true'
+    environment: production
     steps:
       - name: Trigger frontend deployment
         env:
@@ -118,4 +125,4 @@ jobs:
             exit 0
           fi
 
-          curl --fail --silent --show-error --request POST "$FRONTEND_DEPLOY_HOOK_URL"
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --max-time 30 --request POST "$FRONTEND_DEPLOY_HOOK_URL"

@@ -1,0 +1,26 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cfGradient" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C4E456"/>
+      <stop offset="1" stop-color="#8CFCBA"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(12 32 32)">
+    <rect x="12" y="12" width="40" height="40" rx="10" fill="url(#cfGradient)"/>
+    <g transform="rotate(-12 32 32)">
+      <text
+        x="32"
+        y="33.5"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        font-family="Inter, sans-serif"
+        font-size="18"
+        font-weight="800"
+        letter-spacing="-1.6"
+        fill="#0B201F"
+      >
+        CF
+      </text>
+    </g>
+  </g>
+</svg>

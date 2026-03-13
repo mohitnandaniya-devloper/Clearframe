@@ -50,21 +50,33 @@ class MarketService:
         symbols: list[str],
         broker_session: BrokerSession | None = None,
     ) -> list[MarketDataResponse]:
-        if broker_session is not None:
-            await self._ensure_token_mapping(broker_session, symbols)
+        if broker_session is None:
+            raise RuntimeError("Broker connection is required to fetch live market data.")
+
+        await self._ensure_token_mapping(broker_session, symbols)
         rows: list[MarketDataResponse] = []
         for symbol in symbols:
             token, exchange = self.token_mapping.get_token(symbol)
+            quote = await self.angel_one_client.get_market_quote(
+                broker_session,
+                symbol=symbol,
+                token=token,
+                exchange=exchange,
+            )
             rows.append(
                 MarketDataResponse(
-                    symbol=symbol.upper(),
-                    token=token,
-                    exchange=exchange,
-                    ltp=0.0,
-                    volume=None,
-                    bid=None,
-                    ask=None,
-                    timestamp="pending-stream",
+                    symbol=str(quote["symbol"]).upper(),
+                    token=str(quote["token"]),
+                    exchange=str(quote["exchange"]).upper(),
+                    ltp=float(quote["ltp"]),
+                    open=quote.get("open"),
+                    high=quote.get("high"),
+                    low=quote.get("low"),
+                    close=quote.get("close"),
+                    volume=quote.get("volume"),
+                    bid=quote.get("bid"),
+                    ask=quote.get("ask"),
+                    timestamp=str(quote["timestamp"]),
                 )
             )
         return rows

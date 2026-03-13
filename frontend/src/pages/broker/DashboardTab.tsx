@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, BrainCircuit, Search, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { Activity, ArrowRight, Search, TrendingDown, TrendingUp } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MARKET_INDICES, MARKET_SECTIONS, MARKET_STOCKS, getStocksBySymbols, type MarketStock } from "@/lib/market-data";
+import { useMarketQuotes } from "@/hooks/use-market-quotes";
+import type { MarketQuoteSnapshot } from "@/lib/api/brokers";
+import { MARKET_CATALOG, MARKET_SECTIONS, getCatalogBySymbols, type MarketCatalogEntry } from "@/lib/market-data";
 
 interface DashboardTabProps {
   holdings: Array<Record<string, unknown>>;
@@ -38,13 +40,6 @@ function formatPercent(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
-function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
 function asString(value: unknown): string {
   if (value === null || value === undefined || value === "") {
     return "-";
@@ -52,20 +47,18 @@ function asString(value: unknown): string {
   return String(value);
 }
 
-function sparklinePoints(values: number[]): string {
-  const width = 100;
-  const height = 36;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
+function getQuoteChangePercent(quote: MarketQuoteSnapshot | undefined): number {
+  if (!quote?.close || quote.close <= 0) {
+    return 0;
+  }
+  return ((quote.ltp - quote.close) / quote.close) * 100;
+}
 
-  return values
-    .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${x},${y}`;
-    })
-    .join(" ");
+function getQuoteChangeValue(quote: MarketQuoteSnapshot | undefined): number {
+  if (!quote?.close) {
+    return 0;
+  }
+  return quote.ltp - quote.close;
 }
 
 function findHolding(symbol: string, holdings: Array<Record<string, unknown>>): Record<string, unknown> | undefined {
@@ -75,12 +68,19 @@ function findHolding(symbol: string, holdings: Array<Record<string, unknown>>): 
 export function DashboardTab({
   holdings,
   totalValue,
+  investedValue,
   totalPnl,
   pnlPercentage,
   isPnlPositive,
 }: DashboardTabProps) {
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
+
+  const marketSymbols = useMemo(
+    () => Array.from(new Set(MARKET_SECTIONS.flatMap((section) => [...section.symbols]))),
+    [],
+  );
+  const { quotes, isLoading, error } = useMarketQuotes(marketSymbols, { enabled: true, refreshMs: 30000 });
 
   const connectedSymbols = useMemo(
     () =>
@@ -98,17 +98,17 @@ export function DashboardTab({
       return [];
     }
 
-    return MARKET_STOCKS.filter((stock) =>
+    return MARKET_CATALOG.filter((stock) =>
       `${stock.symbol} ${stock.companyName} ${stock.sector}`.toLowerCase().includes(query),
     ).slice(0, 6);
   }, [search]);
 
-  const topIdeas = useMemo(
-    () => [...MARKET_STOCKS].sort((left, right) => right.aiScore - left.aiScore).slice(0, 3),
+  const featuredStocks = useMemo(
+    () => getCatalogBySymbols(MARKET_SECTIONS[0]?.symbols ? [...MARKET_SECTIONS[0].symbols] : []).slice(0, 3),
     [],
   );
 
-  const goToStock = (stock: MarketStock) => {
+  const goToStock = (stock: MarketCatalogEntry) => {
     navigate(`/dashboard/stock/${stock.symbol}`, {
       state: {
         stock,
@@ -120,16 +120,16 @@ export function DashboardTab({
   return (
     <div className="space-y-6">
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border border-[#2B4E44] bg-[#102825] text-[#F6F9F2] ring-0">
-          <CardHeader className="gap-3 pb-0">
+        <Card className="overflow-hidden border border-[#2B4E44] bg-[#102825] text-[#F6F9F2] shadow-[0_20px_48px_rgba(0,0,0,0.18)] ring-0">
+          <CardHeader className="gap-3 border-b border-[#2B4E44]/70 pb-5">
             <Badge variant="outline" className="border-[#416133] bg-[#C4E456]/10 text-[#C4E456]">
-              Market Intelligence
+              Live Market
             </Badge>
             <CardTitle className="text-3xl font-semibold tracking-tight">
-              Track the market, then drill into AI-backed stock context.
+              Track live quotes across the market universe you care about.
             </CardTitle>
             <CardDescription className="max-w-2xl text-[#FFFFFFB3]">
-              This view now surfaces market leaders, index tone, and research-ready stocks instead of only the symbols you already hold.
+              This screen now uses broker-backed quote data for displayed prices, session changes, and day ranges.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 pt-5">
@@ -146,29 +146,36 @@ export function DashboardTab({
             {search.trim() ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {filteredStocks.length > 0 ? (
-                  filteredStocks.map((stock) => (
-                    <button
-                      key={stock.symbol}
-                      type="button"
-                      onClick={() => goToStock(stock)}
-                      className="rounded-xl border border-[#2B4E44] bg-[#0B201F] p-4 text-left transition-colors hover:border-[#416133] hover:bg-[#14302c]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-[#F6F9F2]">{stock.symbol}</p>
-                          <p className="mt-1 text-xs text-[#FFFFFF99]">{stock.companyName}</p>
+                  filteredStocks.map((stock) => {
+                    const quote = quotes.get(stock.symbol);
+                    const changePercent = getQuoteChangePercent(quote);
+
+                    return (
+                      <button
+                        key={stock.symbol}
+                        type="button"
+                        onClick={() => goToStock(stock)}
+                        className="rounded-xl border border-[#2B4E44] bg-[#0B201F]/80 p-4 text-left transition-colors hover:border-[#416133] hover:bg-[#14302c]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-[#F6F9F2]">{stock.symbol}</p>
+                            <p className="mt-1 text-xs text-[#FFFFFF99]">{stock.companyName}</p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={changePercent >= 0 ? "border-[#416133] text-[#C4E456]" : "border-[#6b2c3f] text-[#EB316F]"}
+                          >
+                            {quote ? formatPercent(changePercent) : "Pending"}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={stock.changePercent >= 0 ? "border-[#416133] text-[#C4E456]" : "border-[#6b2c3f] text-[#EB316F]"}
-                        >
-                          {formatPercent(stock.changePercent)}
-                        </Badge>
-                      </div>
-                      <p className="mt-4 text-lg font-semibold text-[#F6F9F2]">{formatCurrency(stock.price)}</p>
-                      <p className="mt-2 text-xs text-[#FFFFFF80]">{stock.theme}</p>
-                    </button>
-                  ))
+                        <p className="mt-4 text-lg font-semibold text-[#F6F9F2]">
+                          {quote ? formatCurrency(quote.ltp) : "Live pending"}
+                        </p>
+                        <p className="mt-2 text-xs text-[#FFFFFF80]">{stock.exchange} · {stock.sector}</p>
+                      </button>
+                    );
+                  })
                 ) : (
                   <Card className="border border-dashed border-[#2B4E44] bg-[#0B201F] text-[#F6F9F2] ring-0 md:col-span-2 xl:col-span-3">
                     <CardContent className="px-6 py-8 text-sm text-[#FFFFFFB3]">
@@ -179,22 +186,24 @@ export function DashboardTab({
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-3">
-                {topIdeas.map((stock) => (
+                {featuredStocks.map((stock) => (
                   <button
                     key={stock.symbol}
                     type="button"
                     onClick={() => goToStock(stock)}
-                    className="rounded-xl border border-[#2B4E44] bg-[#0B201F] p-4 text-left transition-colors hover:border-[#416133] hover:bg-[#14302c]"
+                    className="rounded-xl border border-[#2B4E44] bg-[#0B201F]/80 p-4 text-left transition-colors hover:border-[#416133] hover:bg-[#14302c]"
                   >
                     <div className="flex items-center justify-between">
                       <Badge variant="outline" className="border-[#2B4E44] text-[#FFFFFFB3]">
-                        AI score {stock.aiScore}
+                        {stock.exchange}
                       </Badge>
                       <ArrowRight className="h-4 w-4 text-[#FFFFFF66]" />
                     </div>
                     <p className="mt-4 text-base font-semibold text-[#F6F9F2]">{stock.companyName}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.2em] text-[#FFFFFF80]">{stock.symbol}</p>
-                    <p className="mt-4 text-sm text-[#FFFFFFB3]">{stock.thesis}</p>
+                    <p className="mt-4 text-sm text-[#FFFFFFB3]">
+                      {quotes.get(stock.symbol) ? formatCurrency(quotes.get(stock.symbol)!.ltp) : "Live pending"} · {stock.sector}
+                    </p>
                   </button>
                 ))}
               </div>
@@ -203,62 +212,48 @@ export function DashboardTab({
         </Card>
 
         <div className="grid gap-4">
-          <Card className="border border-[#2B4E44] bg-[#0B201F] text-[#F6F9F2] ring-0">
-            <CardHeader>
+          <Card className="overflow-hidden border border-[#2B4E44] bg-[#102825] text-[#F6F9F2] shadow-[0_20px_48px_rgba(0,0,0,0.16)] ring-0">
+            <CardHeader className="border-b border-[#2B4E44]/70">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="h-4 w-4 text-[#C4E456]" />
-                Daily Market Brief
+                <Activity className="h-4 w-4 text-[#C4E456]" />
+                Market Feed Status
               </CardTitle>
               <CardDescription className="text-[#FFFFFF99]">
-                AI-generated pulse based on breadth, leadership, and your linked portfolio context.
+                Quote coverage and refresh state for this live market view.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3">
-                {MARKET_INDICES.map((index) => (
-                  <div key={index.label} className="rounded-xl border border-[#2B4E44] bg-[#102825] p-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-[#F6F9F2]">{index.label}</p>
-                      <Badge
-                        variant="outline"
-                        className={index.changePercent >= 0 ? "border-[#416133] text-[#C4E456]" : "border-[#6b2c3f] text-[#EB316F]"}
-                      >
-                        {formatPercent(index.changePercent)}
-                      </Badge>
-                    </div>
-                    <p className="mt-3 text-xl font-semibold text-[#F6F9F2]">{formatCompactNumber(index.value)}</p>
-                    <p className="mt-1 text-xs text-[#FFFFFF80]">{index.breadth}</p>
-                  </div>
-                ))}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-[#2B4E44] bg-[#0B201F]/75 p-4">
+                  <p className="text-sm font-medium text-[#F6F9F2]">Universe size</p>
+                  <p className="mt-3 text-xl font-semibold text-[#F6F9F2]">{marketSymbols.length}</p>
+                  <p className="mt-1 text-xs text-[#FFFFFF80]">Tracked symbols in the market screen</p>
+                </div>
+                <div className="rounded-xl border border-[#2B4E44] bg-[#0B201F]/75 p-4">
+                  <p className="text-sm font-medium text-[#F6F9F2]">Live quotes loaded</p>
+                  <p className="mt-3 text-xl font-semibold text-[#F6F9F2]">{quotes.size}</p>
+                  <p className="mt-1 text-xs text-[#FFFFFF80]">{isLoading ? "Refreshing now" : "Refresh interval 30s"}</p>
+                </div>
               </div>
 
               <Separator className="bg-[#2B4E44]" />
 
               <div className="space-y-2 text-sm text-[#FFFFFFB3]">
                 <p>
-                  Leadership is concentrated in private banks, telecom, and select cyclicals, with AI ranking
-                  {` `}
-                  <span className="font-medium text-[#F6F9F2]">{topIdeas[0]?.symbol}</span>
-                  {` `}
-                  as the strongest analytics candidate today.
+                  Displayed market numbers now come from the live quote endpoint instead of seeded frontend price data.
                 </p>
                 <p>
-                  Your connected portfolio is currently {isPnlPositive ? "outperforming" : "lagging"} with
-                  {` `}
-                  <span className={isPnlPositive ? "text-[#C4E456]" : "text-[#EB316F]"}>{formatPercent(pnlPercentage)}</span>
-                  {` `}
-                  overall returns.
+                  {error
+                    ? `Quote API warning: ${error}`
+                    : "If a quote is unavailable, the UI shows a pending state instead of inventing a stock value."}
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border border-[#2B4E44] bg-[#0B201F] text-[#F6F9F2] ring-0">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <BrainCircuit className="h-4 w-4 text-[#C4E456]" />
-                Portfolio Context
-              </CardTitle>
+          <Card className="overflow-hidden border border-[#2B4E44] bg-[#102825] text-[#F6F9F2] shadow-[0_20px_48px_rgba(0,0,0,0.16)] ring-0">
+            <CardHeader className="border-b border-[#2B4E44]/70">
+              <CardTitle className="text-base">Portfolio Context</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-[#2B4E44] bg-[#102825] p-4">
@@ -271,12 +266,14 @@ export function DashboardTab({
                   {formatCurrency(totalPnl)}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#2B4E44] bg-[#102825] p-4 sm:col-span-2">
-                <p className="text-xs uppercase tracking-[0.2em] text-[#FFFFFF80]">Market overlap</p>
-                <p className="mt-2 text-sm text-[#FFFFFFB3]">
-                  {connectedSymbols.size > 0
-                    ? `${connectedSymbols.size} connected holdings are also present in the market screens below.`
-                    : "Connect a broker to compare your portfolio against the market screens below."}
+              <div className="rounded-xl border border-[#2B4E44] bg-[#102825] p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[#FFFFFF80]">Invested</p>
+                <p className="mt-2 text-lg font-semibold text-[#F6F9F2]">{formatCurrency(investedValue)}</p>
+              </div>
+              <div className="rounded-xl border border-[#2B4E44] bg-[#102825] p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-[#FFFFFF80]">Overall return</p>
+                <p className={`mt-2 text-lg font-semibold ${isPnlPositive ? "text-[#C4E456]" : "text-[#EB316F]"}`}>
+                  {formatPercent(pnlPercentage)}
                 </p>
               </div>
             </CardContent>
@@ -285,7 +282,7 @@ export function DashboardTab({
       </section>
 
       {MARKET_SECTIONS.map((section) => {
-        const stocks = getStocksBySymbols([...section.symbols]);
+        const stocks = getCatalogBySymbols([...section.symbols]);
 
         return (
           <Card key={section.id} className="border border-[#2B4E44] bg-[#0B201F] text-[#F6F9F2] ring-0">
@@ -301,21 +298,23 @@ export function DashboardTab({
               </div>
             </CardHeader>
             <CardContent>
-              <Table>
+              <div className="overflow-x-auto">
+              <Table className="min-w-[760px]">
                 <TableHeader>
                   <TableRow className="border-[#2B4E44] hover:bg-transparent">
                     <TableHead className="px-4 text-[#FFFFFF80]">Stock</TableHead>
                     <TableHead className="px-4 text-[#FFFFFF80]">Price</TableHead>
-                    <TableHead className="px-4 text-[#FFFFFF80]">Change</TableHead>
-                    <TableHead className="px-4 text-[#FFFFFF80]">AI score</TableHead>
-                    <TableHead className="px-4 text-[#FFFFFF80]">Theme</TableHead>
-                    <TableHead className="px-4 text-right text-[#FFFFFF80]">Trend</TableHead>
+                    <TableHead className="px-4 text-[#FFFFFF80]">Day change</TableHead>
+                    <TableHead className="px-4 text-[#FFFFFF80]">Day range</TableHead>
+                    <TableHead className="px-4 text-right text-[#FFFFFF80]">Exchange</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {stocks.map((stock) => {
-                    const isPositive = stock.changePercent >= 0;
-                    const points = sparklinePoints(stock.history["1D"]);
+                    const quote = quotes.get(stock.symbol);
+                    const changePercent = getQuoteChangePercent(quote);
+                    const changeValue = getQuoteChangeValue(quote);
+                    const isPositive = changePercent >= 0;
 
                     return (
                       <TableRow
@@ -336,34 +335,27 @@ export function DashboardTab({
                             <span className="text-xs text-[#FFFFFF80]">{stock.companyName}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-4 py-4 text-[#F6F9F2]">{formatCurrency(stock.price)}</TableCell>
+                        <TableCell className="px-4 py-4 text-[#F6F9F2]">
+                          {quote ? formatCurrency(quote.ltp) : "Live pending"}
+                        </TableCell>
                         <TableCell className={`px-4 py-4 ${isPositive ? "text-[#C4E456]" : "text-[#EB316F]"}`}>
                           <span className="inline-flex items-center gap-1 text-sm font-medium">
                             {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                            {formatPercent(stock.changePercent)}
+                            {quote ? `${formatCurrency(changeValue)} · ${formatPercent(changePercent)}` : "-"}
                           </span>
                         </TableCell>
-                        <TableCell className="px-4 py-4 text-[#F6F9F2]">{stock.aiScore}/100</TableCell>
-                        <TableCell className="px-4 py-4 text-[#FFFFFFB3]">{stock.theme}</TableCell>
-                        <TableCell className="px-4 py-4">
-                          <div className="ml-auto flex justify-end">
-                            <svg viewBox="0 0 100 36" className="h-9 w-28">
-                              <polyline
-                                fill="none"
-                                points={points}
-                                stroke={isPositive ? "#C4E456" : "#EB316F"}
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
+                        <TableCell className="px-4 py-4 text-[#FFFFFFB3]">
+                          {quote?.low !== undefined && quote?.low !== null && quote?.high !== undefined && quote?.high !== null
+                            ? `${formatCurrency(quote.low)} - ${formatCurrency(quote.high)}`
+                            : "-"}
                         </TableCell>
+                        <TableCell className="px-4 py-4 text-right text-[#FFFFFFB3]">{stock.exchange}</TableCell>
                       </TableRow>
                     );
                   })}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         );
@@ -373,9 +365,13 @@ export function DashboardTab({
         <Button
           variant="outline"
           className="border-[#2B4E44] bg-[#0B201F] text-[#F6F9F2] hover:bg-[#102825]"
-          onClick={() => goToStock(topIdeas[0])}
+          onClick={() => {
+            if (featuredStocks[0]) {
+              goToStock(featuredStocks[0]);
+            }
+          }}
         >
-          Open top AI-ranked stock
+          Open live stock view
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

@@ -5,7 +5,6 @@ import asyncio
 import uvloop
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import ORJSONResponse
 
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -22,7 +21,6 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         debug=settings.debug,
-        default_response_class=ORJSONResponse,
         lifespan=lifespan,
     )
     app.add_middleware(

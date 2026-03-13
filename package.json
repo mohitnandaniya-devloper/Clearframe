@@ -1,6 +1,12 @@
 {
   "name": "clearframe",
   "private": true,
+  "scripts": {
+    "frontend:dev": "pnpm --dir frontend dev",
+    "frontend:build": "pnpm --dir frontend build",
+    "frontend:lint": "pnpm --dir frontend lint",
+    "frontend:typecheck": "pnpm --dir frontend typecheck"
+  },
   "packageManager": "pnpm@10.30.3",
   "pnpm": {
     "onlyBuiltDependencies": [

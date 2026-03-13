@@ -60,7 +60,7 @@ export function BrokerLoginForm({ brokerName, onBack, onSubmit, isConnecting }: 
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      className="w-full max-w-[480px] bg-[#0B201F]/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-[#2B4E44] overflow-hidden relative mx-auto"
+      className="relative mx-auto w-full max-w-[480px] overflow-hidden rounded-2xl border border-[#2B4E44] bg-[#102825] shadow-[0_28px_70px_rgba(0,0,0,0.28)]"
     >
       <button
         aria-label="Go back"
@@ -72,8 +72,8 @@ export function BrokerLoginForm({ brokerName, onBack, onSubmit, isConnecting }: 
       </button>
 
       {/* Card Header */}
-      <div className="px-6 md:px-8 pt-8 pb-4 text-center">
-        <div className="inline-flex items-center justify-center size-14 rounded-full bg-[#0B201F] text-[#C4E456] mb-5 border border-[#2B4E44]">
+      <div className="border-b border-[#2B4E44]/70 px-6 pb-5 pt-8 text-center md:px-8">
+        <div className="mb-5 inline-flex size-14 items-center justify-center rounded-full border border-[#2B4E44] bg-[#0B201F] text-[#C4E456]">
           <ShieldCheck className="w-7 h-7" />
         </div>
         <h1 className="text-[24px] md:text-[32px] font-medium text-[#F6F9F2] mb-2 tracking-tight leading-tight">
@@ -87,7 +87,7 @@ export function BrokerLoginForm({ brokerName, onBack, onSubmit, isConnecting }: 
       {/* Form */}
       <Form {...form}>
         <form
-          className="px-6 md:px-10 pb-6 space-y-4"
+          className="space-y-4 px-6 pb-6 pt-6 md:px-10"
           onSubmit={form.handleSubmit(handleSubmit)}
         >
           {/* Client Code Field */}
@@ -200,7 +200,7 @@ export function BrokerLoginForm({ brokerName, onBack, onSubmit, isConnecting }: 
       </Form>
 
       {/* Security Badges */}
-      <div className="mt-2 mb-8 flex flex-wrap justify-center items-center gap-4 md:gap-6 opacity-60 grayscale hover:grayscale-0 transition-all duration-500 bg-[#0B201F]/40 py-3 mx-4 rounded-xl border border-[#2B4E44]">
+      <div className="mx-4 mb-8 mt-2 flex flex-wrap items-center justify-center gap-4 rounded-xl border border-[#2B4E44] bg-[#0B201F]/55 py-3 opacity-70 transition-all duration-500 hover:opacity-100 md:gap-6">
         <div className="flex items-center gap-1.5 text-[#FFFFFFB3] font-medium">
           <ShieldCheck className="w-4 h-4" />
           <span className="text-xs">256-bit SSL</span>

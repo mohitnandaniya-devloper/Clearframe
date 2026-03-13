@@ -127,6 +127,66 @@ class AngelOneClient:
             "positions": positions.get("data", []),
         }
 
+    async def get_market_quote(
+        self,
+        session: BrokerSession,
+        *,
+        symbol: str,
+        token: str,
+        exchange: str,
+    ) -> dict[str, Any]:
+        connector = self._create_connector(session.api_key)
+        if connector is None:
+            return {
+                "symbol": symbol.upper(),
+                "token": str(token),
+                "exchange": exchange.upper(),
+                "ltp": 0.0,
+                "open": None,
+                "high": None,
+                "low": None,
+                "close": None,
+                "volume": None,
+                "bid": None,
+                "ask": None,
+                "timestamp": "mock",
+            }
+
+        connector.setAccessToken(session.jwt_token)
+        connector.setRefreshToken(session.refresh_token)
+        connector.setFeedToken(session.feed_token)
+
+        response = self._check_response(
+            await self._run_blocking(
+                connector.ltpData,
+                exchange.upper(),
+                symbol.upper(),
+                str(token),
+            )
+        )
+        data = response.get("data") or {}
+        return {
+            "symbol": symbol.upper(),
+            "token": str(token),
+            "exchange": exchange.upper(),
+            "ltp": self._as_float(data.get("ltp")),
+            "open": self._optional_float(data.get("open")),
+            "high": self._optional_float(data.get("high")),
+            "low": self._optional_float(data.get("low")),
+            "close": self._optional_float(data.get("close")),
+            "volume": self._optional_int(
+                data.get("tradeVolume") or data.get("volume") or data.get("tradevolume")
+            ),
+            "bid": self._optional_float(data.get("opnInterest") or data.get("bestBuyPrice")),
+            "ask": self._optional_float(data.get("bestSellPrice")),
+            "timestamp": str(
+                data.get("exchangeTime")
+                or data.get("exchFeedTime")
+                or data.get("timestamp")
+                or "live-quote"
+            ),
+        }
+
     def _check_response(self, response: dict[str, Any] | None) -> dict[str, Any]:
         if not response:
             return {}
@@ -194,3 +254,23 @@ class AngelOneClient:
         import asyncio
 
         return await asyncio.to_thread(func, *args)
+
+    def _as_float(self, value: Any) -> float:
+        numeric = self._optional_float(value)
+        return numeric if numeric is not None else 0.0
+
+    def _optional_float(self, value: Any) -> float | None:
+        if value in (None, ""):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _optional_int(self, value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None

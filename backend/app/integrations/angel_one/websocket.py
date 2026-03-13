@@ -60,11 +60,13 @@ class SmartAPIWebSocketManager:
         sws = SmartWebSocketV2(
             session.jwt_token, session.api_key, session.client_code, session.feed_token
         )
-        sws.on_open = lambda _ws: logger.info("smartapi.ws.open", user_id=user_id)
-        sws.on_error = lambda _ws, error: logger.error(
-            "smartapi.ws.error", user_id=user_id, error=str(error)
+        sws.on_open = lambda *_args: logger.info("smartapi.ws.open", user_id=user_id)
+        sws.on_error = lambda *_args: logger.error(
+            "smartapi.ws.error",
+            user_id=user_id,
+            error=str(_args[-1]) if _args else "unknown",
         )
-        sws.on_close = lambda _ws: logger.info("smartapi.ws.close", user_id=user_id)
+        sws.on_close = lambda *_args: logger.info("smartapi.ws.close", user_id=user_id)
         sws.on_data = lambda _ws, payload: self._forward_tick(user_id, payload)
 
         thread = Thread(target=sws.connect, daemon=True)
@@ -137,8 +139,19 @@ class SmartAPIWebSocketManager:
 
     @staticmethod
     def _normalize_price(value: object) -> float:
-        numeric = float(value) if value is not None else 0.0
-        return numeric / 100 if numeric >= 1000 else numeric
+        if value is None or value == "":
+            return 0.0
+
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if not cleaned:
+                return 0.0
+            if "." in cleaned:
+                return float(cleaned)
+            return float(cleaned) / 100
+
+        numeric = float(value)
+        return numeric if not numeric.is_integer() else numeric / 100
 
     async def disconnect(self, user_id: int) -> None:
         connection = self._connections.pop(user_id, None)
