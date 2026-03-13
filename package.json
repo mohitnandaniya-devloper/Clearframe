@@ -1,0 +1,13 @@
+{
+  "name": "clearframe",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "msw"
+    ]
+  }
+}
