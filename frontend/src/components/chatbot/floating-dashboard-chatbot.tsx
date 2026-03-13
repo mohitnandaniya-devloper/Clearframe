@@ -194,7 +194,7 @@ export function FloatingDashboardChatbot({
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15, duration: 0.35 }}
-        className="pointer-events-auto flex flex-col items-end gap-1"
+        className="pointer-events-auto relative flex items-end"
       >
         {!isOpen ? (
           <motion.div
@@ -206,7 +206,7 @@ export function FloatingDashboardChatbot({
               ],
             }}
             transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-            className="hidden rounded-full border border-[#FFD1EA]/35 bg-[linear-gradient(135deg,rgba(255,214,236,0.96),rgba(245,154,207,0.92))] px-2.5 py-1 text-[10px] font-semibold text-[#3C0E29] shadow-[0_14px_36px_rgba(245,154,207,0.34)] md:block"
+            className="absolute -top-8 -left-4 hidden rounded-full border border-[#FFD1EA]/35 bg-[linear-gradient(135deg,rgba(255,214,236,0.96),rgba(245,154,207,0.92))] px-2.5 py-1 text-[10px] font-semibold text-[#3C0E29] shadow-[0_14px_36px_rgba(245,154,207,0.34)] md:block"
           >
             Ask AI
           </motion.div>
