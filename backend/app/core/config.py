@@ -46,6 +46,26 @@ class Settings(BaseSettings):
         default=f"sqlite+aiosqlite:///{sqlite_path}",
         validation_alias=AliasChoices("DATABASE_URL"),
     )
+    database_host: str = Field(
+        default="",
+        validation_alias=AliasChoices("DATABASE_HOST", "SUPABASE_DB_HOST"),
+    )
+    database_port: int = Field(
+        default=5432,
+        validation_alias=AliasChoices("DATABASE_PORT", "SUPABASE_DB_PORT"),
+    )
+    database_name: str = Field(
+        default="postgres",
+        validation_alias=AliasChoices("DATABASE_NAME", "SUPABASE_DB_NAME"),
+    )
+    database_user: str = Field(
+        default="postgres",
+        validation_alias=AliasChoices("DATABASE_USER", "SUPABASE_DB_USER"),
+    )
+    database_password: str = Field(
+        default="",
+        validation_alias=AliasChoices("DATABASE_PASSWORD", "SUPABASE_DB_PASSWORD"),
+    )
 
     redis_url: str = Field(
         default="redis://redis:6379/0",
@@ -116,27 +136,6 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("SUPABASE_KEY"),
     )
-    supabase_db_host: str = Field(
-        default="",
-        validation_alias=AliasChoices("SUPABASE_DB_HOST"),
-    )
-    supabase_db_port: int = Field(
-        default=5432,
-        validation_alias=AliasChoices("SUPABASE_DB_PORT"),
-    )
-    supabase_db_name: str = Field(
-        default="postgres",
-        validation_alias=AliasChoices("SUPABASE_DB_NAME"),
-    )
-    supabase_db_user: str = Field(
-        default="postgres",
-        validation_alias=AliasChoices("SUPABASE_DB_USER"),
-    )
-    supabase_db_password: str = Field(
-        default="",
-        validation_alias=AliasChoices("SUPABASE_DB_PASSWORD"),
-    )
-
     allowed_origins: Annotated[list[str], NoDecode] = ["*"]
     metrics_enabled: bool = True
 
@@ -190,6 +189,7 @@ class Settings(BaseSettings):
             if ".supabase.co" in stripped:
                 parsed = urlsplit(stripped)
                 query_params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+                query_params.pop("pgbouncer", None)
                 query_params.pop("sslmode", None)
                 query_params.setdefault("ssl", "require")
                 stripped = urlunsplit(parsed._replace(query=urlencode(query_params)))
@@ -198,13 +198,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
-        if self.supabase_db_host and self.supabase_db_password:
-            encoded_user = quote(self.supabase_db_user, safe="")
-            encoded_password = quote(self.supabase_db_password, safe="")
-            encoded_database = quote(self.supabase_db_name, safe="")
+        if self.database_host and self.database_password:
+            encoded_user = quote(self.database_user, safe="")
+            encoded_password = quote(self.database_password, safe="")
+            encoded_database = quote(self.database_name, safe="")
             self.database_url = (
                 f"postgresql+asyncpg://{encoded_user}:{encoded_password}"
-                f"@{self.supabase_db_host}:{self.supabase_db_port}/{encoded_database}"
+                f"@{self.database_host}:{self.database_port}/{encoded_database}"
                 "?ssl=require"
             )
 

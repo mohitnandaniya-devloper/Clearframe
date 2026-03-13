@@ -10,8 +10,8 @@ def test_database_url_normalizes_sqlite_scheme() -> None:
         app_env="development",
         secret_key="local-secret-key",
         database_url="sqlite:///./local.db",
-        supabase_db_host="",
-        supabase_db_password="",
+        database_host="",
+        database_password="",
     )
 
     assert settings.database_url == "sqlite+aiosqlite:///./local.db"
@@ -22,8 +22,8 @@ def test_database_url_normalizes_supabase_postgres_scheme() -> None:
         app_env="development",
         secret_key="local-secret-key",
         database_url="postgresql://postgres:secret@db.project-ref.supabase.co:5432/postgres",
-        supabase_db_host="",
-        supabase_db_password="",
+        database_host="",
+        database_password="",
     )
 
     assert (
@@ -37,16 +37,38 @@ def test_supabase_password_with_reserved_characters_is_encoded_safely() -> None:
         app_env="development",
         secret_key="local-secret-key",
         database_url="postgresql://postgres:placeholder@db.project-ref.supabase.co:5432/postgres",
-        supabase_db_host="db.project-ref.supabase.co",
-        supabase_db_port=5432,
-        supabase_db_name="postgres",
-        supabase_db_user="postgres",
-        supabase_db_password="Reserved#Pass123!",
+        database_host="db.project-ref.supabase.co",
+        database_port=5432,
+        database_name="postgres",
+        database_user="postgres",
+        database_password="Reserved#Pass123!",
     )
 
     parsed = make_url(settings.database_url)
     assert parsed.password == "Reserved#Pass123!"
     assert parsed.host == "db.project-ref.supabase.co"
+    assert parsed.drivername == "postgresql+asyncpg"
+    assert settings.database_url.endswith("?ssl=require")
+
+
+def test_pooler_database_url_is_built_from_env_parts() -> None:
+    settings = Settings(
+        app_env="production",
+        secret_key="production-secret-key",
+        debug=False,
+        allowed_origins=["https://clearframe.app"],
+        database_host="aws-1-ap-southeast-2.pooler.supabase.com",
+        database_port=6543,
+        database_name="postgres",
+        database_user="postgres.project-ref",
+        database_password="Reserved#Pass123!",
+    )
+
+    parsed = make_url(settings.database_url)
+    assert parsed.password == "Reserved#Pass123!"
+    assert parsed.host == "aws-1-ap-southeast-2.pooler.supabase.com"
+    assert parsed.port == 6543
+    assert parsed.database == "postgres"
     assert parsed.drivername == "postgresql+asyncpg"
     assert settings.database_url.endswith("?ssl=require")
 
