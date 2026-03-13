@@ -26,7 +26,7 @@ export interface PortfolioSummary {
 
 export function normalizePortfolioHolding(holding: PortfolioApiHolding): PortfolioHolding {
   const investedValue = holding.quantity * holding.average_price;
-  const currentValue = holding.quantity * holding.ltp;
+  const currentValue = investedValue + holding.pnl;
 
   return {
     symbol: holding.symbol,
@@ -96,18 +96,11 @@ export function applyMarketTickToHolding(
   holding: PortfolioHolding,
   ltp: number,
 ): PortfolioHolding {
-  const quantity = toNumber(holding.quantity);
-  const averagePrice = toNumber(holding.average_price);
-  const currentValue = quantity * ltp;
-  const investedValue = quantity * averagePrice;
   const history = Array.isArray(holding._ltpHistory) ? holding._ltpHistory : [];
 
   return {
     ...holding,
     last_traded_price: ltp,
-    current_value: currentValue,
-    invested_value: investedValue,
-    pnl: currentValue - investedValue,
     _ltpHistory: [...history, ltp].slice(-60),
   };
 }
@@ -136,17 +129,9 @@ export function mergePortfolioHoldingsWithLiveState(
       return history ? { ...holding, _ltpHistory: history } : holding;
     }
 
-    const quantity = toNumber(holding.quantity);
-    const averagePrice = toNumber(holding.average_price);
-    const investedValue = quantity * averagePrice;
-    const currentValue = quantity * liveLastTradedPrice;
-
     return {
       ...holding,
       last_traded_price: liveLastTradedPrice,
-      current_value: currentValue,
-      invested_value: investedValue,
-      pnl: currentValue - investedValue,
       ...(history ? { _ltpHistory: history } : {}),
     };
   });

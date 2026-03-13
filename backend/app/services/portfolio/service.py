@@ -58,8 +58,7 @@ class PortfolioService:
                 return float(cleaned)
             return float(cleaned) / 100
 
-        numeric = float(value)
-        return numeric if not numeric.is_integer() else numeric / 100
+        return float(value)
 
     async def _get_portfolio_snapshot(
         self,

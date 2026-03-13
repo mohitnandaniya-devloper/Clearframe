@@ -100,6 +100,16 @@ async def test_portfolio_service_reuses_cached_snapshot_for_related_endpoints() 
     assert positions.positions == [{"symbol": "NIFTY", "quantity": 50}]
 
 
+def test_normalize_money_value_keeps_numeric_rupee_values() -> None:
+    assert PortfolioService._normalize_money_value(237) == 237.0
+    assert PortfolioService._normalize_money_value(1909.51) == 1909.51
+
+
+def test_normalize_money_value_converts_string_minor_units() -> None:
+    assert PortfolioService._normalize_money_value("23704") == 237.04
+    assert PortfolioService._normalize_money_value("190951") == 1909.51
+
+
 @pytest.mark.asyncio
 async def test_broker_status_cache_updates_when_disconnect_changes_state() -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
