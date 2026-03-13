@@ -39,7 +39,10 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
             await session.close()
         except DBAPIError as exc:
             message = str(exc).lower()
-            if "connectiondoesnotexisterror" in message or "connection was closed in the middle of operation" in message:
+            if (
+                "connectiondoesnotexisterror" in message
+                or "connection was closed in the middle of operation" in message
+            ):
                 logger.warning("db.session.close_ignored", error=str(exc))
                 return
             raise
