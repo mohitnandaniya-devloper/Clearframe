@@ -6,12 +6,22 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.cache import RedisCache
+from app.core.config import get_settings
 from app.db.models import Base
 from app.db.models.broker_connection import BrokerConnection
 from app.db.models.user import User
 from app.integrations.angel_one.client import BrokerSession
 from app.services.broker.service import BrokerConnectionService
 from app.services.portfolio.service import PortfolioService
+
+
+@pytest.fixture(autouse=True)
+def configure_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key")
+    get_settings.cache_clear()
 
 
 class FakeRedis:
