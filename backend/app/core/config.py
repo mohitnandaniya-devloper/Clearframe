@@ -68,6 +68,30 @@ class Settings(BaseSettings):
         default=120,
         validation_alias=AliasChoices("RATE_LIMIT_PER_MINUTE"),
     )
+    database_pool_size: int = Field(
+        default=5,
+        validation_alias=AliasChoices("DATABASE_POOL_SIZE"),
+    )
+    database_max_overflow: int = Field(
+        default=10,
+        validation_alias=AliasChoices("DATABASE_MAX_OVERFLOW"),
+    )
+    database_pool_recycle_seconds: int = Field(
+        default=1800,
+        validation_alias=AliasChoices("DATABASE_POOL_RECYCLE_SECONDS"),
+    )
+    database_connect_timeout_seconds: float = Field(
+        default=10.0,
+        validation_alias=AliasChoices("DATABASE_CONNECT_TIMEOUT_SECONDS"),
+    )
+    database_connect_max_retries: int = Field(
+        default=5,
+        validation_alias=AliasChoices("DATABASE_CONNECT_MAX_RETRIES"),
+    )
+    database_connect_retry_delay_seconds: float = Field(
+        default=2.0,
+        validation_alias=AliasChoices("DATABASE_CONNECT_RETRY_DELAY_SECONDS"),
+    )
 
     angel_one_api_key: str = Field(
         default="",

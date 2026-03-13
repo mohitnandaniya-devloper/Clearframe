@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from redis.asyncio import Redis
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text
 
 from app.core.cache import RedisCache
@@ -20,6 +22,29 @@ from app.streaming.broadcaster import broadcast
 from app.streaming.market_data_processor import MarketDataProcessor
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+async def wait_for_database() -> None:
+    attempts = settings.database_connect_max_retries + 1
+
+    for attempt in range(1, attempts + 1):
+        try:
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+                await connection.execute(text("SELECT 1"))
+            return
+        except (OSError, SQLAlchemyError) as exc:
+            if attempt >= attempts:
+                raise
+            logger.warning(
+                "Database connection attempt %s/%s failed: %s. Retrying in %ss.",
+                attempt,
+                attempts,
+                exc,
+                settings.database_connect_retry_delay_seconds,
+            )
+            await asyncio.sleep(settings.database_connect_retry_delay_seconds)
 
 
 @asynccontextmanager
@@ -40,9 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         websocket_manager=websocket_manager,
     )
 
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-        await connection.execute(text("SELECT 1"))
+    await wait_for_database()
 
     await broadcast.connect()
     try:
