@@ -2,7 +2,7 @@ from app.domain.constants import SubscriptionMode
 from app.integrations.angel_one.client import AngelOneClient, BrokerSession
 from app.integrations.angel_one.token_mapping import TokenMappingService
 from app.integrations.angel_one.websocket import SmartAPIWebSocketManager
-from app.schemas.market import MarketDataResponse
+from app.schemas.market import MarketDataResponse, MarketHistoryCandle
 from app.streaming.subscription_manager import SubscriptionManager
 
 
@@ -80,6 +80,26 @@ class MarketService:
                 )
             )
         return rows
+
+    async def get_history(
+        self,
+        symbol: str,
+        timeframe: str,
+        broker_session: BrokerSession | None = None,
+    ) -> list[MarketHistoryCandle]:
+        if broker_session is None:
+            raise RuntimeError("Broker connection is required to fetch market history.")
+
+        await self._ensure_token_mapping(broker_session, [symbol])
+        token, exchange = self.token_mapping.get_token(symbol)
+        candles = await self.angel_one_client.get_market_history(
+            broker_session,
+            symbol=symbol,
+            token=token,
+            exchange=exchange,
+            timeframe=timeframe,
+        )
+        return [MarketHistoryCandle(**candle) for candle in candles]
 
     async def _ensure_token_mapping(
         self,

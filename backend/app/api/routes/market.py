@@ -7,7 +7,7 @@ from app.core.rate_limit import enforce_rate_limit
 from app.db.models.user import User
 from app.domain.constants import SubscriptionMode
 from app.integrations.angel_one.client import BrokerSession
-from app.schemas.market import MarketDataResponse, MarketSubscriptionRequest
+from app.schemas.market import MarketDataResponse, MarketHistoryCandle, MarketSubscriptionRequest
 from app.services.market.service import MarketService
 
 router = APIRouter(prefix="/market", tags=["market"], dependencies=[Depends(enforce_rate_limit)])
@@ -66,5 +66,20 @@ async def market_ltp(
     _ = current_user
     try:
         return await market_service.get_ltp(symbols, broker_session)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/history", response_model=list[MarketHistoryCandle])
+async def market_history(
+    symbol: Annotated[str, Query(min_length=1)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    broker_session: Annotated[BrokerSession, Depends(get_broker_session)],
+    market_service: Annotated[MarketService, Depends(get_market_service)],
+    timeframe: Annotated[str, Query(pattern="^(1D|1W|1M|1Y)$")] = "1D",
+) -> list[MarketHistoryCandle]:
+    _ = current_user
+    try:
+        return await market_service.get_history(symbol, timeframe, broker_session)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

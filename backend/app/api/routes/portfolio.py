@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import (
     get_broker_connection_service,
@@ -25,9 +25,14 @@ async def portfolio(
     broker_service: Annotated[
         BrokerConnectionService, Depends(get_broker_connection_service)
     ],
+    fresh: Annotated[bool, Query()] = False,
 ) -> PortfolioResponse:
     try:
-        return await portfolio_service.get_portfolio(current_email, broker_session)
+        return await portfolio_service.get_portfolio(
+            current_email,
+            broker_session,
+            fresh=fresh,
+        )
     except AngelOneAuthError as exc:
         await broker_service.disconnect(current_email)
         raise HTTPException(

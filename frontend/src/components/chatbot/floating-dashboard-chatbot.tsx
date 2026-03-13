@@ -127,7 +127,7 @@ export function FloatingDashboardChatbot({
   };
 
   return (
-    <div className="pointer-events-none fixed bottom-3 right-3 z-50 flex max-w-[calc(100vw-0.75rem)] flex-col items-end gap-1.5 md:bottom-4 md:right-4 md:max-w-[336px]">
+    <div className="pointer-events-none fixed bottom-8 right-3 z-50 flex max-w-[calc(100vw-0.75rem)] flex-col items-end gap-1.5 md:bottom-12 md:right-5 md:max-w-[336px]">
       <AnimatePresence>
         {isOpen ? (
           <motion.div
@@ -214,11 +214,25 @@ export function FloatingDashboardChatbot({
         <button
           type="button"
           onClick={() => setIsOpen((current) => !current)}
-          className="group relative flex h-[60px] w-[60px] items-center justify-center rounded-full bg-transparent p-0 transition-transform hover:-translate-y-1 md:h-[64px] md:w-[64px]"
+          className="group relative flex h-[68px] w-[68px] items-center justify-center rounded-full bg-transparent p-0 transition-transform hover:-translate-y-1 md:h-[74px] md:w-[74px]"
           aria-expanded={isOpen}
           aria-label={isOpen ? "Collapse chatbot" : "Open chatbot"}
         >
-          <MascotLauncherCanvas isOpen={isOpen} />
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 rounded-full border border-[#FFFDF7] shadow-[0_0_0_2px_rgba(232,248,166,0.78),0_0_32px_rgba(196,228,86,0.34),0_16px_34px_rgba(0,0,0,0.3)]"
+          />
+          <span
+            aria-hidden="true"
+            className="absolute inset-[3px] rounded-full border border-[#DDF480]/95"
+          />
+          <span
+            aria-hidden="true"
+            className="absolute inset-[6px] rounded-full bg-[radial-gradient(circle_at_30%_28%,rgba(255,242,248,0.36),rgba(218,240,126,0.12)_44%,rgba(6,20,19,0.75)_82%)]"
+          />
+          <span className="relative z-10 block h-[56px] w-[56px] overflow-hidden rounded-full md:h-[60px] md:w-[60px]">
+            <MascotLauncherCanvas isOpen={isOpen} />
+          </span>
         </button>
       </motion.div>
     </div>

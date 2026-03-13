@@ -23,3 +23,12 @@ class MarketDataResponse(BaseModel):
     bid: float | None = None
     ask: float | None = None
     timestamp: str
+
+
+class MarketHistoryCandle(BaseModel):
+    timestamp: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int | None = None

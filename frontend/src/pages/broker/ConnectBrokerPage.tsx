@@ -188,7 +188,9 @@ export default function ConnectBrokerPage() {
 
     setIsRefreshingDashboard(true);
     try {
-      const connectedView = await resolveConnectedBrokerView(selectedBroker);
+      const connectedView = await resolveConnectedBrokerView(selectedBroker, {
+        freshPortfolio: true,
+      });
       if (!connectedView) {
         setConnectionResponse(null);
         setConnectionError("Broker session is no longer active.");
@@ -414,13 +416,16 @@ export default function ConnectBrokerPage() {
   );
 }
 
-async function resolveConnectedBrokerView(brokerId: string): Promise<BrokerApiResponse | null> {
+async function resolveConnectedBrokerView(
+  brokerId: string,
+  options?: Parameters<typeof fetchConnectedBrokerView>[1],
+): Promise<BrokerApiResponse | null> {
   for (const delayMs of CONNECTED_VIEW_RETRY_DELAYS_MS) {
     if (delayMs > 0) {
       await wait(delayMs);
     }
 
-    const connectedView = await fetchConnectedBrokerView(brokerId);
+    const connectedView = await fetchConnectedBrokerView(brokerId, options);
     if (connectedView) {
       return connectedView;
     }

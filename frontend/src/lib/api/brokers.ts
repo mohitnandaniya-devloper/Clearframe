@@ -40,6 +40,12 @@ interface TokenPair {
 
 interface PortfolioResponse {
   holdings: PortfolioApiHolding[];
+  summary?: {
+    current_value: number;
+    invested_value: number;
+    total_pnl: number;
+    pnl_percentage?: number | null;
+  } | null;
 }
 
 export interface MarketTickMessage {
@@ -58,6 +64,19 @@ export interface MarketQuoteSnapshot extends MarketTickMessage {
   high?: number | null;
   low?: number | null;
   close?: number | null;
+}
+
+export interface MarketHistoryCandle {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number | null;
+}
+
+interface ConnectedBrokerViewOptions {
+  freshPortfolio?: boolean;
 }
 
 const brokers = brokersData as Broker[];
@@ -101,7 +120,7 @@ export async function connectBroker(
 
   if (response.connection_state === "connected") {
     setConnectedBroker(brokerId);
-    const connectedView = await fetchConnectedBrokerView(brokerId);
+    const connectedView = await fetchConnectedBrokerView(brokerId, { freshPortfolio: true });
     if (connectedView) {
       setStoredConnectedBrokerView(connectedView);
     }
@@ -124,6 +143,7 @@ export async function disconnectBroker(brokerId: string): Promise<BrokerApiRespo
 
 export async function fetchConnectedBrokerView(
   brokerId: string,
+  options: ConnectedBrokerViewOptions = {},
 ): Promise<BrokerApiResponse | null> {
   if (brokerId !== "angel_one") {
     return null;
@@ -142,7 +162,11 @@ export async function fetchConnectedBrokerView(
   let portfolioData: PortfolioResponse | null = null;
   let portfolioError: string | null = null;
   try {
-    portfolioData = await fetchWithAuth<PortfolioResponse>(`${API_BASE_URL}/portfolio`);
+    const portfolioUrl = new URL(`${API_BASE_URL}/portfolio`);
+    if (options.freshPortfolio) {
+      portfolioUrl.searchParams.set("fresh", "true");
+    }
+    portfolioData = await fetchWithAuth<PortfolioResponse>(portfolioUrl.toString());
   } catch (error) {
     portfolioError =
       error instanceof Error ? error.message : "Unable to fetch portfolio details.";
@@ -156,7 +180,15 @@ export async function fetchConnectedBrokerView(
 
   const holdings = (portfolioData?.holdings ?? []).map((holding) => normalizePortfolioHolding(holding));
 
-  const portfolioSummary = buildPortfolioSummary(holdings);
+  const portfolioSummary = portfolioData?.summary
+    ? {
+        current_value: portfolioData.summary.current_value,
+        invested_value: portfolioData.summary.invested_value,
+        total_pnl: portfolioData.summary.total_pnl,
+        holdings_count: holdings.length,
+        pnl_percentage: portfolioData.summary.pnl_percentage ?? null,
+      }
+    : buildPortfolioSummary(holdings);
   const connectedView: BrokerApiResponse = {
     ...status,
     success: status.connection_state === "connected",
@@ -221,6 +253,16 @@ export async function fetchMarketQuotes(symbols: string[]): Promise<MarketQuoteS
   }
 
   return fetchWithAuth<MarketQuoteSnapshot[]>(url.toString());
+}
+
+export async function fetchMarketHistory(
+  symbol: string,
+  timeframe: "1D" | "1W" | "1M" | "1Y",
+): Promise<MarketHistoryCandle[]> {
+  const url = new URL(`${API_BASE_URL}/market/history`);
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("timeframe", timeframe);
+  return fetchWithAuth<MarketHistoryCandle[]>(url.toString());
 }
 
 async function ensureAccessToken(forceRefresh = false): Promise<string> {

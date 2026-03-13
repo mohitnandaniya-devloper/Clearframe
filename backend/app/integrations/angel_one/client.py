@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -101,16 +102,28 @@ class AngelOneClient:
                         "quantity": 10,
                         "average_price": 2800.0,
                         "ltp": 2845.5,
+                        "current_value": 28455.0,
+                        "invested_value": 28000.0,
                         "pnl": 455.0,
+                        "pnl_percentage": 1.625,
                     },
                     {
                         "symbol": "SBIN",
                         "quantity": 20,
                         "average_price": 740.0,
                         "ltp": 751.2,
+                        "current_value": 15024.0,
+                        "invested_value": 14800.0,
                         "pnl": 224.0,
+                        "pnl_percentage": 1.5135,
                     },
                 ],
+                "totalholding": {
+                    "totalinvvalue": 42800.0,
+                    "totalholdingvalue": 43479.0,
+                    "totalprofitandloss": 679.0,
+                    "totalpnlpercentage": 1.5864,
+                },
                 "orders": [{"order_id": "demo-1", "symbol": "RELIANCE", "status": "OPEN"}],
                 "positions": [{"symbol": "NIFTY", "quantity": 50, "pnl": 1220.0}],
             }
@@ -119,10 +132,12 @@ class AngelOneClient:
         connector.setRefreshToken(session.refresh_token)
         connector.setFeedToken(session.feed_token)
         holdings = self._check_response(await self._run_blocking(connector.holding))
+        total_holding = await self._fetch_total_holding_snapshot(connector)
         orders = self._check_response(await self._run_blocking(connector.orderBook))
         positions = self._check_response(await self._run_blocking(connector.position))
         return {
             "holdings": holdings.get("data", []),
+            "totalholding": total_holding,
             "orders": orders.get("data", []),
             "positions": positions.get("data", []),
         }
@@ -186,6 +201,53 @@ class AngelOneClient:
                 or "live-quote"
             ),
         }
+
+    async def get_market_history(
+        self,
+        session: BrokerSession,
+        *,
+        symbol: str,
+        token: str,
+        exchange: str,
+        timeframe: str,
+    ) -> list[dict[str, Any]]:
+        connector = self._create_connector(session.api_key)
+        if connector is None:
+            return []
+
+        connector.setAccessToken(session.jwt_token)
+        connector.setRefreshToken(session.refresh_token)
+        connector.setFeedToken(session.feed_token)
+
+        interval, from_date, to_date = self._history_window(timeframe)
+        response = self._check_response(
+            await self._run_blocking(
+                connector.getCandleData,
+                {
+                    "exchange": exchange.upper(),
+                    "symboltoken": str(token),
+                    "interval": interval,
+                    "fromdate": from_date,
+                    "todate": to_date,
+                },
+            )
+        )
+        rows = response.get("data") or []
+        candles: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, list) or len(row) < 5:
+                continue
+            candles.append(
+                {
+                    "timestamp": str(row[0]),
+                    "open": self._as_float(row[1]),
+                    "high": self._as_float(row[2]),
+                    "low": self._as_float(row[3]),
+                    "close": self._as_float(row[4]),
+                    "volume": self._optional_int(row[5]) if len(row) > 5 else None,
+                }
+            )
+        return candles
 
     def _check_response(self, response: dict[str, Any] | None) -> dict[str, Any]:
         if not response:
@@ -254,6 +316,40 @@ class AngelOneClient:
         import asyncio
 
         return await asyncio.to_thread(func, *args)
+
+    async def _fetch_total_holding_snapshot(self, connector: Any) -> dict[str, Any] | None:
+        for method_name in ("allholding", "allHolding", "getAllHolding", "getallholding"):
+            method = getattr(connector, method_name, None)
+            if method is None:
+                continue
+            response = self._check_response(await self._run_blocking(method))
+            data = response.get("data")
+            if isinstance(data, dict):
+                total_holding = data.get("totalholding")
+                if isinstance(total_holding, dict):
+                    return total_holding
+                if isinstance(total_holding, list) and total_holding and isinstance(total_holding[0], dict):
+                    return total_holding[0]
+        return None
+
+    def _history_window(self, timeframe: str) -> tuple[str, str, str]:
+        now = datetime.now(UTC)
+        normalized = timeframe.upper()
+        if normalized == "1D":
+            start = now - timedelta(days=1)
+            interval = "FIVE_MINUTE"
+        elif normalized == "1W":
+            start = now - timedelta(days=7)
+            interval = "ONE_HOUR"
+        elif normalized == "1M":
+            start = now - timedelta(days=30)
+            interval = "ONE_DAY"
+        else:
+            start = now - timedelta(days=365)
+            interval = "ONE_DAY"
+
+        formatter = "%Y-%m-%d %H:%M"
+        return interval, start.strftime(formatter), now.strftime(formatter)
 
     def _as_float(self, value: Any) -> float:
         numeric = self._optional_float(value)

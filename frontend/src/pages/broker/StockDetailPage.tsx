@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useMarketQuotes } from "@/hooks/use-market-quotes";
 import { useMarketStream } from "@/hooks/use-market-stream";
-import type { MarketTickMessage } from "@/lib/api/brokers";
+import { fetchMarketHistory, type MarketHistoryCandle, type MarketTickMessage } from "@/lib/api/brokers";
 import {
   getMarketCatalogEntry,
   getStoredWatchlistSymbols,
@@ -29,7 +30,10 @@ export interface StockDetailHolding {
   invested_value: number;
   current_value: number;
   pnl: number;
+  pnl_percentage?: number | null;
 }
+
+type Timeframe = "1D" | "1W" | "1M" | "1Y";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-IN", {
@@ -51,7 +55,7 @@ function getHoldingPnlPercent(holding: StockDetailHolding | undefined): number {
   if (!holding || holding.invested_value <= 0) {
     return 0;
   }
-  return (holding.pnl / holding.invested_value) * 100;
+  return holding.pnl_percentage ?? (holding.pnl / holding.invested_value) * 100;
 }
 
 function toggleWatchlist(symbol: string): string[] {
@@ -80,10 +84,44 @@ export default function StockDetailPage() {
   const initialQuote = quotes.get(resolvedSymbol);
   const initialPrice = initialQuote?.ltp ?? holding?.last_traded_price ?? 0;
 
+  const [timeframe, setTimeframe] = useState<Timeframe>("1D");
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>(() => getStoredWatchlistSymbols());
   const [intradayPrices, setIntradayPrices] = useState<number[]>(() => (initialPrice > 0 ? [initialPrice] : []));
+  const [historyCandles, setHistoryCandles] = useState<MarketHistoryCandle[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   useEffect(() => subscribeToWatchlistChanges(() => setWatchlistSymbols(getStoredWatchlistSymbols())), []);
+
+  useEffect(() => {
+    if (!resolvedSymbol) {
+      setHistoryCandles([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadHistory = async () => {
+      setIsHistoryLoading(true);
+      try {
+        const candles = await fetchMarketHistory(resolvedSymbol, timeframe);
+        if (!cancelled) {
+          setHistoryCandles(candles);
+        }
+      } catch {
+        if (!cancelled) {
+          setHistoryCandles([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHistoryLoading(false);
+        }
+      }
+    };
+
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedSymbol, timeframe]);
 
   useMarketStream({
     enabled: Boolean(resolvedSymbol),
@@ -125,11 +163,17 @@ export default function StockDetailPage() {
   const isPositive = priceChange >= 0;
   const isTracked = watchlistSymbols.includes(stock.symbol);
   const holdingPnlPercent = getHoldingPnlPercent(holding);
-  const chartPrices = intradayPrices.length > 0 ? intradayPrices : initialPrice > 0 ? [initialPrice] : [];
-  const chartData = chartPrices.map((price, index) => ({
-    label: `${index + 1}`,
-    price,
-  }));
+  const fallbackPrices = intradayPrices.length > 0 ? intradayPrices : initialPrice > 0 ? [initialPrice] : [];
+  const chartData =
+    historyCandles.length > 0
+      ? historyCandles.map((candle, index) => ({
+          label: formatHistoryLabel(candle.timestamp, index, timeframe),
+          price: candle.close,
+        }))
+      : fallbackPrices.map((price, index) => ({
+          label: `${index + 1}`,
+          price,
+        }));
 
   const dayLow = quote?.low;
   const dayHigh = quote?.high;
@@ -209,12 +253,21 @@ export default function StockDetailPage() {
             <div>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <LineChart className="h-5 w-5 text-[#C4E456]" />
-                Live session trace
+                Market history
               </CardTitle>
               <CardDescription className="mt-1 text-[#FFFFFF99]">
-                Built from the current quote plus live websocket ticks received while this page is open.
+                Historical candles come from Angel One. Live ticks are still used for the current price.
               </CardDescription>
             </div>
+            <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as Timeframe)}>
+              <TabsList className="border border-[#2B4E44] bg-[#102825]">
+                {(["1D", "1W", "1M", "1Y"] as Timeframe[]).map((value) => (
+                  <TabsTrigger key={value} value={value} className="data-active:bg-[#C4E456] data-active:text-[#0B201F]">
+                    {value}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
           </CardHeader>
           <CardContent className="pb-6">
             <div className="h-[360px]">
@@ -258,6 +311,9 @@ export default function StockDetailPage() {
                 </AreaChart>
               </ChartContainer>
             </div>
+            <p className="mt-3 text-xs text-[#FFFFFF80]">
+              {isHistoryLoading ? "Loading Angel One candle history..." : historyCandles.length > 0 ? "Chart uses broker candle history." : "History unavailable, showing live session trace fallback."}
+            </p>
           </CardContent>
         </Card>
 
@@ -325,4 +381,30 @@ export default function StockDetailPage() {
       </div>
     </div>
   );
+}
+
+function formatHistoryLabel(timestamp: string, index: number, timeframe: Timeframe): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return `${index + 1}`;
+  }
+
+  if (timeframe === "1D") {
+    return new Intl.DateTimeFormat("en-IN", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  if (timeframe === "1W") {
+    return new Intl.DateTimeFormat("en-IN", {
+      weekday: "short",
+      hour: "numeric",
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
 }

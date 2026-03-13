@@ -259,7 +259,10 @@ export function PortfolioDashboard({
       : activeHoldings.length
     : 0;
 
-  const pnlPercentage = investedValue > 0 ? (totalPnl / investedValue) * 100 : 0;
+  const pnlPercentage = numericOrFallback(
+    portfolioSummary?.pnl_percentage,
+    investedValue > 0 ? (totalPnl / investedValue) * 100 : 0,
+  );
   const isPnlPositive = totalPnl >= 0;
   const syncStatusLabel = isRefreshing ? "Syncing portfolio..." : "Auto-sync is active.";
   const connectionSuccess = mergedResponse.connection_state === "connected";
@@ -638,7 +641,10 @@ export function PortfolioDashboard({
                               const invVal = holdingInvestedValue(holding) || holdingQty * avgPrice;
                               const curVal = holdingCurrentValue(holding) || holdingQty * ltp;
                               const pnl = holdingPnlValue(holding) || curVal - invVal;
-                              const percentChange = invVal > 0 ? (pnl / invVal) * 100 : 0;
+                              const percentChange = numericOrFallback(
+                                holding.pnl_percentage,
+                                invVal > 0 ? (pnl / invVal) * 100 : 0,
+                              );
                               const isPos = pnl >= 0;
 
                               return (

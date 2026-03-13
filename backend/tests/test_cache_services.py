@@ -56,9 +56,17 @@ class FakePortfolioClient:
                     "quantity": 10,
                     "averageprice": 280050,
                     "ltp": 284525,
+                    "holdingvalue": 28455,
                     "profitandloss": 4475,
+                    "pnlpercentage": 1.598,
                 }
             ],
+            "totalholding": {
+                "totalinvvalue": 23980,
+                "totalholdingvalue": 28455,
+                "totalprofitandloss": 4475,
+                "totalpnlpercentage": 18.661,
+            },
             "orders": [{"order_id": "demo-1", "status": "OPEN"}],
             "positions": [{"symbol": "NIFTY", "quantity": 50}],
         }
@@ -96,8 +104,32 @@ async def test_portfolio_service_reuses_cached_snapshot_for_related_endpoints() 
 
     assert client.calls == 1
     assert portfolio.holdings[0].symbol == "RELIANCE"
+    assert portfolio.holdings[0].invested_value == 23980.0
+    assert portfolio.holdings[0].current_value == 28455.0
+    assert portfolio.holdings[0].pnl_percentage == 1.598
+    assert portfolio.summary is not None
+    assert portfolio.summary.total_pnl == 4475.0
+    assert portfolio.summary.pnl_percentage == 18.661
     assert orders.orders == [{"order_id": "demo-1", "status": "OPEN"}]
     assert positions.positions == [{"symbol": "NIFTY", "quantity": 50}]
+
+
+@pytest.mark.asyncio
+async def test_portfolio_service_fresh_fetch_bypasses_cached_snapshot() -> None:
+    client = FakePortfolioClient()
+    cache = RedisCache(FakeRedis(), key_prefix="test")
+    service = PortfolioService(client, cache)
+    session = build_broker_session()
+
+    first = await service.get_portfolio("user@example.com", session)
+    second = await service.get_portfolio("user@example.com", session)
+    fresh = await service.get_portfolio("user@example.com", session, fresh=True)
+
+    assert client.calls == 2
+    assert first.summary is not None
+    assert second.summary is not None
+    assert fresh.summary is not None
+    assert first.summary.total_pnl == second.summary.total_pnl == fresh.summary.total_pnl == 4475.0
 
 
 def test_normalize_money_value_keeps_numeric_rupee_values() -> None:

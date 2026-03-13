@@ -3,7 +3,10 @@ export interface PortfolioApiHolding {
   quantity: number;
   average_price: number;
   ltp: number;
+  invested_value?: number;
+  current_value?: number;
   pnl: number;
+  pnl_percentage?: number | null;
 }
 
 export interface PortfolioHolding extends Record<string, unknown> {
@@ -14,6 +17,7 @@ export interface PortfolioHolding extends Record<string, unknown> {
   invested_value: number;
   current_value: number;
   pnl: number;
+  pnl_percentage?: number | null;
   _ltpHistory?: number[];
 }
 
@@ -22,11 +26,14 @@ export interface PortfolioSummary {
   invested_value: number;
   total_pnl: number;
   holdings_count: number;
+  pnl_percentage?: number | null;
 }
 
 export function normalizePortfolioHolding(holding: PortfolioApiHolding): PortfolioHolding {
-  const investedValue = holding.quantity * holding.average_price;
-  const currentValue = investedValue + holding.pnl;
+  const investedValue = holding.invested_value ?? holding.quantity * holding.average_price;
+  const currentValue = holding.quantity * holding.ltp;
+  const pnl = currentValue - investedValue;
+  const pnlPercentage = investedValue > 0 ? (pnl / investedValue) * 100 : null;
 
   return {
     symbol: holding.symbol,
@@ -35,7 +42,8 @@ export function normalizePortfolioHolding(holding: PortfolioApiHolding): Portfol
     last_traded_price: holding.ltp,
     invested_value: investedValue,
     current_value: currentValue,
-    pnl: holding.pnl,
+    pnl,
+    pnl_percentage: pnlPercentage,
   };
 }
 
@@ -58,12 +66,18 @@ export function holdingInvestedValue(holding: Record<string, unknown>): number {
 export function holdingCurrentValue(holding: Record<string, unknown>): number {
   const quantity = toNumber(holding.quantity);
   const lastTradedPrice = toNumber(holding.last_traded_price);
+  if (quantity > 0 && lastTradedPrice > 0) {
+    return quantity * lastTradedPrice;
+  }
   return numericOrFallback(holding.current_value, quantity * lastTradedPrice);
 }
 
 export function holdingPnlValue(holding: Record<string, unknown>): number {
   const investedValue = holdingInvestedValue(holding);
   const currentValue = holdingCurrentValue(holding);
+  if (investedValue > 0 && currentValue > 0) {
+    return currentValue - investedValue;
+  }
   return numericOrFallback(holding.pnl, currentValue - investedValue);
 }
 
@@ -76,7 +90,7 @@ export function holdingHasPosition(holding: Record<string, unknown>): boolean {
 }
 
 export function buildPortfolioSummary(holdings: Array<Record<string, unknown>>): PortfolioSummary {
-  return holdings.reduce<PortfolioSummary>(
+  const summary = holdings.reduce<PortfolioSummary>(
     (summary, holding) => {
       summary.current_value += holdingCurrentValue(holding);
       summary.invested_value += holdingInvestedValue(holding);
@@ -88,8 +102,12 @@ export function buildPortfolioSummary(holdings: Array<Record<string, unknown>>):
       invested_value: 0,
       total_pnl: 0,
       holdings_count: holdings.length,
+      pnl_percentage: null,
     },
   );
+  summary.pnl_percentage =
+    summary.invested_value > 0 ? (summary.total_pnl / summary.invested_value) * 100 : null;
+  return summary;
 }
 
 export function applyMarketTickToHolding(
@@ -97,10 +115,17 @@ export function applyMarketTickToHolding(
   ltp: number,
 ): PortfolioHolding {
   const history = Array.isArray(holding._ltpHistory) ? holding._ltpHistory : [];
+  const investedValue = holdingInvestedValue(holding);
+  const currentValue = toNumber(holding.quantity) * ltp;
+  const pnl = currentValue - investedValue;
+  const pnlPercentage = investedValue > 0 ? (pnl / investedValue) * 100 : null;
 
   return {
     ...holding,
     last_traded_price: ltp,
+    current_value: currentValue,
+    pnl,
+    pnl_percentage: pnlPercentage,
     _ltpHistory: [...history, ltp].slice(-60),
   };
 }
@@ -129,9 +154,17 @@ export function mergePortfolioHoldingsWithLiveState(
       return history ? { ...holding, _ltpHistory: history } : holding;
     }
 
+    const investedValue = holdingInvestedValue(holding);
+    const currentValue = toNumber(holding.quantity) * liveLastTradedPrice;
+    const pnl = currentValue - investedValue;
+    const pnlPercentage = investedValue > 0 ? (pnl / investedValue) * 100 : null;
+
     return {
       ...holding,
       last_traded_price: liveLastTradedPrice,
+      current_value: currentValue,
+      pnl,
+      pnl_percentage: pnlPercentage,
       ...(history ? { _ltpHistory: history } : {}),
     };
   });
