@@ -105,8 +105,10 @@ class SmartAPIWebSocketManager:
         if connection is None:
             return
         exchange_buckets: dict[str, list[str]] = {}
-        for item in self.token_mapping.batch(symbols):
+        for item in self.token_mapping.batch_known(symbols):
             exchange_buckets.setdefault(item["exchange"], []).append(item["token"])
+        if not exchange_buckets:
+            return
         payload = [
             {
                 "exchangeType": 1 if exchange == "NSE" else 2,

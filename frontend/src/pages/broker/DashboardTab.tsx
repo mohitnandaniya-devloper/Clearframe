@@ -61,6 +61,29 @@ function getQuoteChangeValue(quote: MarketQuoteSnapshot | undefined): number {
   return quote.ltp - quote.close;
 }
 
+function formatStreamStatusLabel(
+  streamStatus: "idle" | "connecting" | "live" | "error",
+  lastTickAt: number | null,
+): string {
+  if (streamStatus === "live" && lastTickAt) {
+    return `WebSocket live · last tick ${new Date(lastTickAt).toLocaleTimeString("en-IN", {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    })}`;
+  }
+
+  if (streamStatus === "connecting") {
+    return "Opening live market stream";
+  }
+
+  if (streamStatus === "error") {
+    return "Live stream unavailable";
+  }
+
+  return "Live stream idle";
+}
+
 function findHolding(symbol: string, holdings: Array<Record<string, unknown>>): Record<string, unknown> | undefined {
   return holdings.find((holding) => asString(holding.symbol).toUpperCase() === symbol.toUpperCase());
 }
@@ -80,7 +103,18 @@ export function DashboardTab({
     () => Array.from(new Set(MARKET_SECTIONS.flatMap((section) => [...section.symbols]))),
     [],
   );
-  const { quotes, isLoading, error } = useMarketQuotes(marketSymbols, { enabled: true, refreshMs: 30000 });
+  const {
+    quotes,
+    isLoading,
+    error,
+    streamStatus,
+    streamError,
+    lastTickAt,
+  } = useMarketQuotes(marketSymbols, {
+    enabled: true,
+    refreshMs: 120000,
+    streamEnabled: true,
+  });
 
   const connectedSymbols = useMemo(
     () =>
@@ -219,7 +253,7 @@ export function DashboardTab({
                 Market Feed Status
               </CardTitle>
               <CardDescription className="text-[#FFFFFF99]">
-                Quote coverage and refresh state for this live market view.
+                Quote coverage, websocket state, and fallback refresh health for this live market view.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -230,9 +264,13 @@ export function DashboardTab({
                   <p className="mt-1 text-xs text-[#FFFFFF80]">Tracked symbols in the market screen</p>
                 </div>
                 <div className="rounded-xl border border-[#2B4E44] bg-[#0B201F]/75 p-4">
-                  <p className="text-sm font-medium text-[#F6F9F2]">Live quotes loaded</p>
-                  <p className="mt-3 text-xl font-semibold text-[#F6F9F2]">{quotes.size}</p>
-                  <p className="mt-1 text-xs text-[#FFFFFF80]">{isLoading ? "Refreshing now" : "Refresh interval 30s"}</p>
+                  <p className="text-sm font-medium text-[#F6F9F2]">Market stream</p>
+                  <p className="mt-3 text-xl font-semibold text-[#F6F9F2]">
+                    {streamStatus === "live" ? "Live" : streamStatus === "connecting" ? "Connecting" : streamStatus === "error" ? "Fallback" : "Idle"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#FFFFFF80]">
+                    {formatStreamStatusLabel(streamStatus, lastTickAt)}
+                  </p>
                 </div>
               </div>
 
@@ -240,12 +278,16 @@ export function DashboardTab({
 
               <div className="space-y-2 text-sm text-[#FFFFFFB3]">
                 <p>
-                  Displayed market numbers now come from the live quote endpoint instead of seeded frontend price data.
+                  Displayed market numbers now start from a broker quote snapshot and then update through the live websocket stream.
                 </p>
                 <p>
-                  {error
-                    ? `Quote API warning: ${error}`
-                    : "If a quote is unavailable, the UI shows a pending state instead of inventing a stock value."}
+                  {streamError
+                    ? `WebSocket warning: ${streamError}`
+                    : error
+                      ? `Quote API warning: ${error}`
+                      : isLoading
+                        ? "Refreshing the fallback quote snapshot in the background."
+                        : "If the stream drops, the market screen keeps a slower quote refresh instead of inventing prices."}
                 </p>
               </div>
             </CardContent>

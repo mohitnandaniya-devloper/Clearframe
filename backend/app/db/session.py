@@ -1,9 +1,11 @@
 from collections.abc import AsyncIterator
 
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
+from app.core.logging import logger
 
 settings = get_settings()
 url = make_url(settings.database_url)
@@ -29,5 +31,15 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:
-    async with AsyncSessionLocal() as session:
+    session = AsyncSessionLocal()
+    try:
         yield session
+    finally:
+        try:
+            await session.close()
+        except DBAPIError as exc:
+            message = str(exc).lower()
+            if "connectiondoesnotexisterror" in message or "connection was closed in the middle of operation" in message:
+                logger.warning("db.session.close_ignored", error=str(exc))
+                return
+            raise

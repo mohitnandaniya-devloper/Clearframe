@@ -66,6 +66,9 @@ import { ClearframeBrand } from "@/components/brand/clearframe-brand";
 const DashboardTab = lazy(() =>
   import("./DashboardTab").then((module) => ({ default: module.DashboardTab })),
 );
+const AssistantTab = lazy(() =>
+  import("./AssistantTab").then((module) => ({ default: module.AssistantTab })),
+);
 const StockDetailPage = lazy(() => import("./StockDetailPage"));
 const WatchlistTab = lazy(() =>
   import("./WatchlistTab").then((module) => ({ default: module.WatchlistTab })),
@@ -287,7 +290,7 @@ export function PortfolioDashboard({
   const activeNavLabel =
     NAVIGATION_ITEMS.find((item) => item.id === activeNavItem)?.label ?? "Market";
   const accountName = profile ? stringValue(profile.display_name) : brokerName;
-  const chatbotHoldings = useMemo<DashboardChatbotHolding[]>(
+  const assistantHoldings = useMemo<DashboardChatbotHolding[]>(
     () =>
       activeHoldings
         .map((holding) => ({
@@ -295,10 +298,10 @@ export function PortfolioDashboard({
           quantity: toNumber(holding.quantity),
           pnl: holdingPnlValue(holding),
         }))
-        .sort((left, right) => Math.abs(right.pnl) - Math.abs(left.pnl))
-        .slice(0, 5),
+        .sort((left, right) => Math.abs(right.pnl) - Math.abs(left.pnl)),
     [activeHoldings],
   );
+  const chatbotHoldings = useMemo(() => assistantHoldings.slice(0, 5), [assistantHoldings]);
 
   return (
     <SidebarProvider>
@@ -470,7 +473,13 @@ export function PortfolioDashboard({
             </div>
           </header>
 
-          <section className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <section
+            className={
+              activeNavItem === "assistant"
+                ? "flex-1 overflow-hidden"
+                : "flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"
+            }
+          >
             {activeNavItem === "portfolio" ? (
               <div className="space-y-8">
                 {(errorMessage || profileError || portfolioError || portfolioFetchState === "failed") && (
@@ -742,11 +751,17 @@ export function PortfolioDashboard({
                 </Routes>
               </Suspense>
             ) : activeNavItem === "assistant" ? (
-              <FeaturePlaceholder
-                activeNavLabel={activeNavLabel}
-                title="AI copilot for market research"
-                description="Use this space for stock explainers, thesis comparisons, and portfolio-aware market questions grounded in your connected broker data."
-              />
+              <Suspense fallback={<DashboardContentSkeleton />}>
+                <AssistantTab
+                  accountName={accountName}
+                  holdings={assistantHoldings}
+                  totalValue={totalValue}
+                  investedValue={investedValue}
+                  totalPnl={totalPnl}
+                  pnlPercentage={pnlPercentage}
+                  connectionLabel={connectionStatusLabel}
+                />
+              </Suspense>
             ) : activeNavItem === "analysis" ? (
               <FeaturePlaceholder
                 activeNavLabel={activeNavLabel}

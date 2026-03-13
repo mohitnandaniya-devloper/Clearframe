@@ -87,6 +87,10 @@ class Settings(BaseSettings):
         default=120,
         validation_alias=AliasChoices("RATE_LIMIT_PER_MINUTE"),
     )
+    market_rate_limit_per_minute: int = Field(
+        default=240,
+        validation_alias=AliasChoices("MARKET_RATE_LIMIT_PER_MINUTE"),
+    )
     database_pool_size: int = Field(
         default=5,
         validation_alias=AliasChoices("DATABASE_POOL_SIZE"),

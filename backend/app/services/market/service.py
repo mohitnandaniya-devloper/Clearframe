@@ -1,3 +1,6 @@
+import asyncio
+
+from app.core.logging import logger
 from app.domain.constants import SubscriptionMode
 from app.integrations.angel_one.client import AngelOneClient, BrokerSession
 from app.integrations.angel_one.token_mapping import TokenMappingService
@@ -26,13 +29,18 @@ class MarketService:
         mode: SubscriptionMode,
         broker_session: BrokerSession | None = None,
     ) -> dict[str, object]:
+        resolved_symbols = [symbol.upper() for symbol in symbols]
         if broker_session is not None:
             if not self.websocket_manager.has_connection(user_id):
                 await self.websocket_manager.connect(user_id, broker_session)
-            await self._ensure_token_mapping(broker_session, symbols)
-        await self.subscription_manager.add(user_id, symbols)
-        await self.websocket_manager.subscribe(user_id, symbols, mode)
-        return {"subscribed": [symbol.upper() for symbol in symbols], "mode": mode.name}
+            resolved_symbols = await self._ensure_token_mapping(
+                broker_session,
+                symbols,
+                strict=False,
+            )
+        await self.subscription_manager.add(user_id, resolved_symbols)
+        await self.websocket_manager.subscribe(user_id, resolved_symbols, mode)
+        return {"subscribed": resolved_symbols, "mode": mode.name}
 
     async def unsubscribe(
         self,
@@ -53,33 +61,40 @@ class MarketService:
         if broker_session is None:
             raise RuntimeError("Broker connection is required to fetch live market data.")
 
-        await self._ensure_token_mapping(broker_session, symbols)
-        rows: list[MarketDataResponse] = []
-        for symbol in symbols:
+        resolved_symbols = await self._ensure_token_mapping(
+            broker_session,
+            symbols,
+            strict=False,
+        )
+        if not resolved_symbols:
+            return []
+        semaphore = asyncio.Semaphore(4)
+
+        async def load_quote(symbol: str) -> MarketDataResponse:
             token, exchange = self.token_mapping.get_token(symbol)
-            quote = await self.angel_one_client.get_market_quote(
-                broker_session,
-                symbol=symbol,
-                token=token,
-                exchange=exchange,
-            )
-            rows.append(
-                MarketDataResponse(
-                    symbol=str(quote["symbol"]).upper(),
-                    token=str(quote["token"]),
-                    exchange=str(quote["exchange"]).upper(),
-                    ltp=float(quote["ltp"]),
-                    open=quote.get("open"),
-                    high=quote.get("high"),
-                    low=quote.get("low"),
-                    close=quote.get("close"),
-                    volume=quote.get("volume"),
-                    bid=quote.get("bid"),
-                    ask=quote.get("ask"),
-                    timestamp=str(quote["timestamp"]),
+            async with semaphore:
+                quote = await self.angel_one_client.get_market_quote(
+                    broker_session,
+                    symbol=symbol,
+                    token=token,
+                    exchange=exchange,
                 )
+            return MarketDataResponse(
+                symbol=str(quote["symbol"]).upper(),
+                token=str(quote["token"]),
+                exchange=str(quote["exchange"]).upper(),
+                ltp=float(quote["ltp"]),
+                open=quote.get("open"),
+                high=quote.get("high"),
+                low=quote.get("low"),
+                close=quote.get("close"),
+                volume=quote.get("volume"),
+                bid=quote.get("bid"),
+                ask=quote.get("ask"),
+                timestamp=str(quote["timestamp"]),
             )
-        return rows
+
+        return list(await asyncio.gather(*(load_quote(symbol) for symbol in resolved_symbols)))
 
     async def get_history(
         self,
@@ -90,7 +105,7 @@ class MarketService:
         if broker_session is None:
             raise RuntimeError("Broker connection is required to fetch market history.")
 
-        await self._ensure_token_mapping(broker_session, [symbol])
+        await self._ensure_token_mapping(broker_session, [symbol], strict=True)
         token, exchange = self.token_mapping.get_token(symbol)
         candles = await self.angel_one_client.get_market_history(
             broker_session,
@@ -105,14 +120,29 @@ class MarketService:
         self,
         broker_session: BrokerSession,
         symbols: list[str],
-    ) -> None:
+        *,
+        strict: bool,
+    ) -> list[str]:
+        resolved_symbols: list[str] = []
         for symbol in symbols:
             try:
                 self.token_mapping.get_token(symbol)
+                resolved_symbols.append(symbol.upper())
             except KeyError:
-                mapping = await self.angel_one_client.lookup_symbol(broker_session, symbol)
+                try:
+                    mapping = await self.angel_one_client.lookup_symbol(broker_session, symbol)
+                except Exception:
+                    if strict:
+                        raise
+                    logger.warning(
+                        "market.symbol_lookup_skipped",
+                        symbol=symbol.upper(),
+                    )
+                    continue
                 self.token_mapping.register(
                     mapping["symbol"],
                     mapping["token"],
                     mapping["exchange"],
                 )
+                resolved_symbols.append(mapping["symbol"].upper())
+        return resolved_symbols

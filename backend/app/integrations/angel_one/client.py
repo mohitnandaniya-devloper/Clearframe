@@ -1,4 +1,5 @@
 import asyncio
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -31,6 +32,8 @@ class AngelOneClient:
     def __init__(self) -> None:
         self.settings = get_settings()
         self._symbol_cache: dict[str, dict[str, str]] = {}
+        self._symbol_lookup_failures: dict[str, float] = {}
+        self._symbol_lookup_failure_ttl_seconds = 600
 
     def _create_connector(self, api_key: str) -> Any:
         if SmartConnect is None:
@@ -261,6 +264,12 @@ class AngelOneClient:
         normalized_symbol = symbol.upper()
         if normalized_symbol in self._symbol_cache:
             return self._symbol_cache[normalized_symbol]
+        last_failed_at = self._symbol_lookup_failures.get(normalized_symbol)
+        if (
+            last_failed_at is not None
+            and time.monotonic() - last_failed_at < self._symbol_lookup_failure_ttl_seconds
+        ):
+            raise AngelOneAuthError(f"Recently failed to resolve symbol token for {symbol}")
 
         connector = self._create_connector(session.api_key)
         if connector is None:
@@ -270,35 +279,70 @@ class AngelOneClient:
         connector.setRefreshToken(session.refresh_token)
         connector.setFeedToken(session.feed_token)
 
-        # Search NSE first as it is most common for Indian markets
-        for exchange in ("NSE", "NFO", "BSE", "BFO"):
-            try:
-                # Add a small delay between exchanges to avoid rapid-fire hits
-                if exchange != "NSE":
-                    await asyncio.sleep(0.5)
+        try:
+            search_terms = self._build_lookup_search_terms(normalized_symbol)
+            exchanges = self._build_lookup_exchanges(normalized_symbol)
 
-                response = await self._run_blocking_with_retry(
-                    connector.searchScrip,
-                    exchange,
-                    symbol,
-                )
-                for item in response.get("data", []) or []:
-                    if str(item.get("tradingsymbol", "")).upper() == normalized_symbol:
-                        result = {
-                            "symbol": normalized_symbol,
-                            "token": str(item["symboltoken"]),
-                            "exchange": str(item["exchange"]).upper(),
-                        }
-                        self._symbol_cache[normalized_symbol] = result
-                        return result
-            except Exception as e:
-                # Back off on rate limits and continue searching other exchanges.
-                if "access rate" in str(e).lower():
-                    await asyncio.sleep(2)
-                    continue
-                raise
+            for search_term in search_terms:
+                for exchange in exchanges:
+                    try:
+                        if exchange != exchanges[0]:
+                            await asyncio.sleep(0.4)
+
+                        response = await self._run_blocking_with_retry(
+                            connector.searchScrip,
+                            exchange,
+                            search_term,
+                        )
+                        for item in response.get("data", []) or []:
+                            trading_symbol = str(item.get("tradingsymbol", "")).upper()
+                            normalized_trading_symbol = self._normalize_lookup_symbol(
+                                trading_symbol
+                            )
+                            if normalized_trading_symbol in {
+                                self._normalize_lookup_symbol(normalized_symbol),
+                                self._normalize_lookup_symbol(search_term),
+                            }:
+                                result = {
+                                    "symbol": normalized_symbol,
+                                    "token": str(item["symboltoken"]),
+                                    "exchange": str(item["exchange"]).upper(),
+                                }
+                                self._symbol_cache[normalized_symbol] = result
+                                self._symbol_lookup_failures.pop(normalized_symbol, None)
+                                return result
+                    except Exception as e:
+                        # Back off on rate limits and continue searching other exchanges.
+                        if "access rate" in str(e).lower():
+                            await asyncio.sleep(2)
+                            continue
+                        if "internal server error" in str(e).lower():
+                            continue
+                        raise
+        finally:
+            if normalized_symbol not in self._symbol_cache:
+                self._symbol_lookup_failures[normalized_symbol] = time.monotonic()
 
         raise AngelOneAuthError(f"Unable to resolve symbol token for {symbol}")
+
+    def _build_lookup_exchanges(self, normalized_symbol: str) -> tuple[str, ...]:
+        derivative_markers = (" CE", " PE", "FUT", "OPT", "BANKNIFTY", "NIFTY")
+        if any(marker in normalized_symbol for marker in derivative_markers):
+            return ("NFO", "BFO", "NSE", "BSE")
+        return ("NSE", "BSE")
+
+    def _build_lookup_search_terms(self, normalized_symbol: str) -> list[str]:
+        aliases = {
+            "BHARTIARTL": ["BHARTIARTL", "BHARTI AIRTEL"],
+            "M&M": ["M&M", "M & M", "MAHINDRA & MAHINDRA", "MAHINDRA AND MAHINDRA"],
+        }
+        return aliases.get(normalized_symbol, [normalized_symbol])
+
+    def _normalize_lookup_symbol(self, value: str) -> str:
+        normalized = value.upper().removesuffix("-EQ")
+        for token in (" ", "&", "-"):
+            normalized = normalized.replace(token, "")
+        return normalized
 
     async def _run_blocking_with_retry(self, func: Any, *args: Any) -> Any:
         @retry(

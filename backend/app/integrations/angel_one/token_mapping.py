@@ -9,6 +9,9 @@ DEFAULT_SYMBOLS: dict[str, tuple[str, str]] = {
     "ICICIBANK": ("4963", "NSE"),
     "INFY": ("1594", "NSE"),
     "TCS": ("11536", "NSE"),
+    "LT": ("11483", "NSE"),
+    "SUNPHARMA": ("3351", "NSE"),
+    "AXISBANK": ("5900", "NSE"),
 }
 
 

@@ -52,6 +52,29 @@ function getQuoteChangeValue(quote: MarketQuoteSnapshot | undefined): number {
   return quote.ltp - quote.close;
 }
 
+function formatStreamStatusLabel(
+  streamStatus: "idle" | "connecting" | "live" | "error",
+  lastTickAt: number | null,
+): string {
+  if (streamStatus === "live" && lastTickAt) {
+    return `WebSocket live · last tick ${new Date(lastTickAt).toLocaleTimeString("en-IN", {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    })}`;
+  }
+
+  if (streamStatus === "connecting") {
+    return "Opening live watchlist stream";
+  }
+
+  if (streamStatus === "error") {
+    return "Live stream unavailable";
+  }
+
+  return "Live stream idle";
+}
+
 export function WatchlistTab() {
   const [query, setQuery] = useState("");
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>(() => getStoredWatchlistSymbols());
@@ -59,7 +82,11 @@ export function WatchlistTab() {
 
   useEffect(() => subscribeToWatchlistChanges(() => setWatchlistSymbols(getStoredWatchlistSymbols())), []);
 
-  const { quotes, error } = useMarketQuotes(watchlistSymbols, { enabled: watchlistSymbols.length > 0, refreshMs: 30000 });
+  const { quotes, error, streamStatus, streamError, lastTickAt } = useMarketQuotes(watchlistSymbols, {
+    enabled: watchlistSymbols.length > 0,
+    refreshMs: 120000,
+    streamEnabled: true,
+  });
 
   const watchlistStocks = useMemo(
     () =>
@@ -240,10 +267,14 @@ export function WatchlistTab() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-[#FFFFFFB3]">
               <div className="rounded-xl border border-[#2B4E44] bg-[#0B201F]/75 p-4">
-                {watchlistSymbols.length} symbols are currently tracked for live quote refresh.
+                {watchlistSymbols.length} symbols are currently tracked for live websocket quote updates.
               </div>
               <div className="rounded-xl border border-[#2B4E44] bg-[#0B201F]/75 p-4">
-                {error ? `Quote API warning: ${error}` : "Each watchlist row refreshes from the live market quote endpoint."}
+                {streamError
+                  ? `WebSocket warning: ${streamError}`
+                  : error
+                    ? `Quote API warning: ${error}`
+                    : formatStreamStatusLabel(streamStatus, lastTickAt)}
               </div>
             </CardContent>
           </Card>
