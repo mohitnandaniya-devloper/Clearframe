@@ -7,8 +7,9 @@
 - Use `backend/.env.local` for local development only.
 - Use `backend/.env.production` only on your deployment target or in a private local deployment workflow.
 - Commit only `backend/.env.example`.
-- Prefer `DATABASE_URL` as the single source of truth for Postgres.
-- If you do not want to store the full URL directly, leave `DATABASE_URL` empty and use the `SUPABASE_DB_*` variables instead.
+- Prefer Supabase for Postgres and Upstash for Redis.
+- Use `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, and `DATABASE_PASSWORD`, or provide `DATABASE_URL` directly if your platform manages a single URL secret.
+- Set `REDIS_URL` to the Upstash Redis protocol endpoint (`rediss://...`), not the REST API URL.
 
 ### Frontend
 
@@ -26,7 +27,7 @@
 - Set a strong `SECRET_KEY`
 - Restrict `ALLOWED_ORIGINS`
 - Set `SMARTAPI_MOCK_MODE=false` for live integrations
-- Provide `DATABASE_URL` and `REDIS_URL`
+- Provide Supabase Postgres credentials and an Upstash `REDIS_URL`
 
 ### Frontend
 

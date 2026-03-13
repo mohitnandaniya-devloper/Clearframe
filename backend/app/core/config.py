@@ -41,9 +41,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("JWT_ALGORITHM"),
     )
 
-    sqlite_path: str = str(BASE_DIR / "clearframe.db")
     database_url: str = Field(
-        default=f"sqlite+aiosqlite:///{sqlite_path}",
+        default="",
         validation_alias=AliasChoices("DATABASE_URL"),
     )
     database_host: str = Field(
@@ -68,7 +67,7 @@ class Settings(BaseSettings):
     )
 
     redis_url: str = Field(
-        default="redis://redis:6379/0",
+        default="",
         validation_alias=AliasChoices("REDIS_URL"),
     )
     redis_channel_prefix: str = "market"
@@ -207,6 +206,15 @@ class Settings(BaseSettings):
                 f"@{self.database_host}:{self.database_port}/{encoded_database}"
                 "?ssl=require"
             )
+
+        if not self.database_url:
+            raise ValueError(
+                "Configure DATABASE_URL or DATABASE_HOST/DATABASE_PORT/DATABASE_NAME/"
+                "DATABASE_USER/DATABASE_PASSWORD."
+            )
+
+        if not self.redis_url:
+            raise ValueError("Configure REDIS_URL.")
 
         if self.app_env != "production":
             return self

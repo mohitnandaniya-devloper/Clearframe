@@ -20,9 +20,10 @@ cp .env.example .env.local
 
 ```bash
 uv sync --group dev
-docker compose up redis -d
 APP_ENV=development uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+Local development expects real Supabase and Upstash credentials in `.env.local`.
 
 ## Required backend-only secrets
 
@@ -38,21 +39,27 @@ These values must remain on the backend only and must never be exposed through t
 - Set a strong `SECRET_KEY`
 - Set `DEBUG=false`
 - Restrict `ALLOWED_ORIGINS`
-- Prefer a full Postgres connection string in `DATABASE_URL`. The backend will
-  normalize a plain Supabase URL to `postgresql+asyncpg` and add `ssl=require`
-  automatically, so this format works:
+- Prefer Supabase Postgres via the split env vars `DATABASE_HOST`,
+  `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, and `DATABASE_PASSWORD`.
+  The backend will assemble the async SQLAlchemy URL with `ssl=require`
+  automatically.
+
+Optional override if your platform only gives you a single DSN:
 
 ```bash
 postgresql://postgres:YOUR_DB_PASSWORD@db.your-project-ref.supabase.co:5432/postgres
 ```
 
-- If you prefer not to store the full URL directly, leave `DATABASE_URL` blank and
-  supply `SUPABASE_DB_HOST`, `SUPABASE_DB_PORT`, `SUPABASE_DB_NAME`,
-  `SUPABASE_DB_USER`, and `SUPABASE_DB_PASSWORD` instead.
-- `SUPABASE_URL` and `SUPABASE_KEY` are optional and only needed if you later call
-  Supabase APIs directly from the backend.
-- Provide Redis and database connection strings through deployment env vars or an
-  uncommitted `.env.production`
+- Use Upstash Redis with a Redis protocol URL:
+
+```bash
+rediss://default:YOUR_UPSTASH_PASSWORD@your-upstash-host.upstash.io:6379
+```
+
+- Do not use the Upstash REST URL/token for this backend; it relies on Redis protocol
+  commands and pub/sub.
+- Provide Redis and database credentials through deployment env vars or an
+  uncommitted `.env.production`.
 
 ## Tests
 
@@ -66,7 +73,9 @@ uv run pytest
 docker compose up --build
 ```
 
-The compose file is intended for local development. For production, inject environment variables through your platform instead of committing env files.
+The compose file only runs the API and worker containers. It does not provision Redis
+or Postgres. For both local and production runs, point the backend at Supabase and
+Upstash through environment variables.
 
 ## Render deployment
 
@@ -83,8 +92,12 @@ Required Render environment variables:
 - `APP_ENV=production`
 - `DEBUG=false`
 - `SECRET_KEY=<strong-random-value>`
-- `DATABASE_URL=<your-supabase-postgres-url>`
-- `REDIS_URL=<your-redis-url>`
+- `DATABASE_HOST=<your-supabase-pooler-host>`
+- `DATABASE_PORT=6543`
+- `DATABASE_NAME=postgres`
+- `DATABASE_USER=<your-supabase-db-user>`
+- `DATABASE_PASSWORD=<your-supabase-db-password>`
+- `REDIS_URL=<your-upstash-rediss-url>`
 - `ALLOWED_ORIGINS=<comma-separated-frontend-origins>`
 
 Optional useful variables:
