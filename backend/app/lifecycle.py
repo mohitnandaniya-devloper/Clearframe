@@ -7,8 +7,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from redis.asyncio import Redis
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.cache import RedisCache
 from app.core.config import get_settings
@@ -39,7 +39,8 @@ async def wait_for_database() -> None:
     )
     if settings.ignored_split_database_env:
         logger.warning(
-            "DATABASE_URL is set and takes precedence over split DATABASE_* values. Ignoring split database env vars."
+            "DATABASE_URL is set and takes precedence over split DATABASE_* values. "
+            "Ignoring split database env vars."
         )
 
     for attempt in range(1, attempts + 1):
@@ -61,7 +62,8 @@ async def wait_for_database() -> None:
                 )
                 raise
             logger.warning(
-                "Database connection attempt %s/%s failed for source=%s host=%s port=%s name=%s user=%s: %s. Retrying in %ss.",
+                "Database connection attempt %s/%s failed for source=%s host=%s "
+                "port=%s name=%s user=%s: %s. Retrying in %ss.",
                 attempt,
                 attempts,
                 settings.database_config_source,
