@@ -95,6 +95,8 @@ def test_database_url_takes_precedence_over_split_database_env_vars() -> None:
     assert parsed.database == "renderdb"
     assert parsed.username == "render-user"
     assert parsed.password == "correct-secret"
+    assert settings.database_config_source == "database_url"
+    assert settings.ignored_split_database_env is True
 
 
 def test_pooler_database_url_is_built_from_env_parts() -> None:
@@ -119,6 +121,8 @@ def test_pooler_database_url_is_built_from_env_parts() -> None:
     assert parsed.database == "postgres"
     assert parsed.drivername == "postgresql+asyncpg"
     assert settings.database_url.endswith("?ssl=require")
+    assert settings.database_config_source == "split_env"
+    assert settings.ignored_split_database_env is False
 
 
 def test_split_database_env_requires_all_required_values() -> None:

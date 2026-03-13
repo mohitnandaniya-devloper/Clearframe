@@ -30,12 +30,17 @@ async def wait_for_database() -> None:
     db_target = settings.database_debug_summary
 
     logger.info(
-        "Connecting to database host=%s port=%s name=%s user=%s",
+        "Connecting to database source=%s host=%s port=%s name=%s user=%s",
+        settings.database_config_source,
         db_target["host"],
         db_target["port"],
         db_target["database"],
         db_target["user"],
     )
+    if settings.ignored_split_database_env:
+        logger.warning(
+            "DATABASE_URL is set and takes precedence over split DATABASE_* values. Ignoring split database env vars."
+        )
 
     for attempt in range(1, attempts + 1):
         try:
@@ -46,7 +51,8 @@ async def wait_for_database() -> None:
         except (OSError, SQLAlchemyError) as exc:
             if attempt >= attempts:
                 logger.error(
-                    "Database startup failed for host=%s port=%s name=%s user=%s: %s",
+                    "Database startup failed for source=%s host=%s port=%s name=%s user=%s: %s",
+                    settings.database_config_source,
                     db_target["host"],
                     db_target["port"],
                     db_target["database"],
@@ -55,9 +61,10 @@ async def wait_for_database() -> None:
                 )
                 raise
             logger.warning(
-                "Database connection attempt %s/%s failed for host=%s port=%s name=%s user=%s: %s. Retrying in %ss.",
+                "Database connection attempt %s/%s failed for source=%s host=%s port=%s name=%s user=%s: %s. Retrying in %ss.",
                 attempt,
                 attempts,
+                settings.database_config_source,
                 db_target["host"],
                 db_target["port"],
                 db_target["database"],

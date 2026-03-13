@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     )
     allowed_origins: Annotated[list[str], NoDecode] = ["*"]
     metrics_enabled: bool = True
+    _database_config_source: Literal["database_url", "split_env", "unknown"] = PrivateAttr(
+        default="unknown"
+    )
+    _ignored_split_database_env: bool = PrivateAttr(default=False)
 
     @property
     def database_debug_summary(self) -> dict[str, str | int]:
@@ -147,6 +151,14 @@ class Settings(BaseSettings):
             "database": parsed.path.lstrip("/"),
             "user": parsed.username or "",
         }
+
+    @property
+    def database_config_source(self) -> Literal["database_url", "split_env", "unknown"]:
+        return self._database_config_source
+
+    @property
+    def ignored_split_database_env(self) -> bool:
+        return self._ignored_split_database_env
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
@@ -214,8 +226,10 @@ class Settings(BaseSettings):
         provided_split_keys = [key for key, value in split_database_values.items() if value]
 
         if self.database_url:
+            self._database_config_source = "database_url"
             if self.database_host or self.database_password:
                 # An explicit DATABASE_URL should win over split env vars, which may be stale.
+                self._ignored_split_database_env = True
                 self.database_url = self.parse_database_url(self.database_url)  # type: ignore[assignment]
         elif provided_split_keys:
             required_split_keys = ["DATABASE_HOST", "DATABASE_PASSWORD"]
@@ -239,6 +253,7 @@ class Settings(BaseSettings):
                 f"@{self.database_host}:{self.database_port}/{encoded_database}"
                 "?ssl=require"
             )
+            self._database_config_source = "split_env"
 
         if not self.database_url:
             raise ValueError(
