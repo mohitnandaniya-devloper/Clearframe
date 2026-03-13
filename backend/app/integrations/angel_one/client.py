@@ -328,7 +328,11 @@ class AngelOneClient:
                 total_holding = data.get("totalholding")
                 if isinstance(total_holding, dict):
                     return total_holding
-                if isinstance(total_holding, list) and total_holding and isinstance(total_holding[0], dict):
+                if (
+                    isinstance(total_holding, list)
+                    and total_holding
+                    and isinstance(total_holding[0], dict)
+                ):
                     return total_holding[0]
         return None
 
